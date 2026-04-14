@@ -251,17 +251,34 @@ export default function SessionPage() {
                 <Play className="mr-2 w-5 h-5" /> Start Step
               </Button>
             ) : (
-              <div className="text-center mb-4">
-                {timerExpired ? (
-                  <div>
-                    <p className="text-red-500 font-semibold text-sm mb-1">{"Time's up!"}</p>
-                    <span className="text-4xl font-mono font-bold text-red-500">00:00</span>
+              <div className="flex justify-center mb-4">
+                <div className="relative w-36 h-36">
+                  <svg className="w-36 h-36 -rotate-90" viewBox="0 0 144 144">
+                    <circle cx="72" cy="72" r="60" fill="none" stroke="#f3f0ff" strokeWidth="10" />
+                    <circle
+                      cx="72" cy="72" r="60"
+                      fill="none"
+                      stroke={timerExpired ? "#ef4444" : timer <= 60 ? "#f97316" : "#7c3aed"}
+                      strokeWidth="10"
+                      strokeLinecap="round"
+                      strokeDasharray={String(2 * Math.PI * 60)}
+                      strokeDashoffset={timerExpired ? 0 : String(2 * Math.PI * 60 * (1 - timer / ((currentStep?.estimatedMinutes ?? 5) * 60)))}
+                      style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s ease" }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    {timerExpired ? (
+                      <>
+                        <span className="text-red-500 text-xs font-semibold">Time&apos;s up!</span>
+                        <span className="text-2xl font-mono font-bold text-red-500">00:00</span>
+                      </>
+                    ) : (
+                      <span className={"text-2xl font-mono font-bold " + (timer <= 60 ? "text-orange-500 timer-urgent" : "text-[#7c3aed]")}>
+                        {formatTime(timer)}
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  <span className={"text-4xl font-mono font-bold " + (timer <= 60 ? "text-orange-500" : "text-[#7c3aed]")}>
-                    {formatTime(timer)}
-                  </span>
-                )}
+                </div>
               </div>
             )}
 

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,8 @@ import { Loader2, Zap, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useSessionStore } from "@/store/session";
 import { BreakdownPreview } from "@/components/BreakdownPreview";
+import { OnboardingSlides } from "@/components/OnboardingSlides";
+import { UpgradeModal } from "@/components/UpgradeModal";
 
 const DURATIONS = [15, 25, 45, 60];
 
@@ -23,6 +25,14 @@ export default function NewTaskPage() {
   const [pageStep, setPageStep] = useState<"form" | "preview">("form");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [steps, setSteps] = useState<Step[]>([]);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  useEffect(() => {
+    if (!localSession.onboardingCompleted) {
+      setShowOnboarding(true);
+    }
+  }, [localSession.onboardingCompleted]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,8 +56,7 @@ export default function NewTaskPage() {
       if (!breakdownRes.ok) {
         const err = await breakdownRes.json();
         if (err.error === "USAGE_LIMIT_REACHED") {
-          toast.error("Free limit reached. Upgrade to Pro for unlimited AI breakdowns.");
-          router.push("/app/session/" + session.id);
+          setShowUpgradeModal(true);
           return;
         }
         throw new Error(err.error || "Failed to generate breakdown");
@@ -78,7 +87,7 @@ export default function NewTaskPage() {
       if (!res.ok) {
         const err = await res.json();
         if (err.error === "USAGE_LIMIT_REACHED") {
-          toast.error("Free limit reached. Upgrade to Pro for unlimited AI breakdowns.");
+          setShowUpgradeModal(true);
           return;
         }
         throw new Error("Failed to regenerate");
@@ -95,83 +104,90 @@ export default function NewTaskPage() {
 
   if (pageStep === "preview" && sessionId) {
     return (
-      <div className="max-w-xl mx-auto">
-        <div className="mb-6">
-          <p className="text-sm text-gray-500 mb-1">Breaking down:</p>
-          <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+      <>
+        {showUpgradeModal && <UpgradeModal open={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />}
+        <div className="max-w-xl mx-auto">
+          <div className="mb-6">
+            <p className="text-sm text-gray-500 mb-1">Breaking down:</p>
+            <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+          </div>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-gray-600">{steps.length} steps · click any step to edit</p>
+            <Button
+              onClick={handleRegenerate}
+              disabled={regenerating}
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+            >
+              {regenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Regenerate
+            </Button>
+          </div>
+          <BreakdownPreview sessionId={sessionId} initialSteps={steps} />
         </div>
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-gray-600">{steps.length} steps · click any step to edit</p>
-          <Button
-            onClick={handleRegenerate}
-            disabled={regenerating}
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-          >
-            {regenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            Regenerate
-          </Button>
-        </div>
-        <BreakdownPreview sessionId={sessionId} initialSteps={steps} />
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="max-w-xl mx-auto">
-      <div className="text-center mb-8">
-        <div className="w-12 h-12 rounded-xl bg-[#7c3aed] flex items-center justify-center mx-auto mb-4">
-          <Zap className="w-7 h-7 text-white" />
+    <>
+      {showOnboarding && <OnboardingSlides onComplete={() => setShowOnboarding(false)} />}
+      {showUpgradeModal && <UpgradeModal open={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />}
+      <div className="max-w-xl mx-auto">
+        <div className="text-center mb-8">
+          <div className="w-12 h-12 rounded-xl bg-[#7c3aed] flex items-center justify-center mx-auto mb-4">
+            <Zap className="w-7 h-7 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">What are you trying to do?</h1>
+          <p className="text-gray-500">Describe your task and we will break it into tiny steps.</p>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">What are you trying to do?</h1>
-        <p className="text-gray-500">Describe your task and we will break it into tiny steps.</p>
-      </div>
-      <Card>
-        <CardContent className="p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Write the project proposal, Do my taxes, Clean my desk..."
-                className="text-base h-12"
-                disabled={loading}
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">How long do you have?</label>
-              <div className="grid grid-cols-4 gap-2">
-                {DURATIONS.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setTargetMinutes(d)}
-                    className={"py-2 px-3 rounded-lg border-2 text-sm font-medium transition-colors " + (targetMinutes === d ? "border-[#7c3aed] bg-purple-50 text-[#7c3aed]" : "border-gray-200 text-gray-600 hover:border-gray-300")}
-                  >
-                    {d} min
-                  </button>
-                ))}
+        <Card>
+          <CardContent className="p-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Write the project proposal, Do my taxes, Clean my desk..."
+                  className="text-base h-12"
+                  disabled={loading}
+                  autoFocus
+                />
               </div>
-            </div>
-            <Button
-              type="submit"
-              disabled={loading || !title.trim()}
-              className="w-full bg-[#7c3aed] hover:bg-[#6d28d9] h-12 text-base"
-            >
-              {loading ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Breaking it down...</>
-              ) : (
-                <>Break It Down <Zap className="ml-2 h-4 w-4" /></>
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-      <p className="text-center text-sm text-gray-400 mt-4">
-        Uses AI to break your task into tiny, timed steps
-      </p>
-    </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">How long do you have?</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {DURATIONS.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setTargetMinutes(d)}
+                      className={"py-2 px-3 rounded-lg border-2 text-sm font-medium transition-colors " + (targetMinutes === d ? "border-[#7c3aed] bg-purple-50 text-[#7c3aed]" : "border-gray-200 text-gray-600 hover:border-gray-300")}
+                    >
+                      {d} min
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Button
+                type="submit"
+                disabled={loading || !title.trim()}
+                className="w-full bg-[#7c3aed] hover:bg-[#6d28d9] h-12 text-base"
+              >
+                {loading ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Breaking it down...</>
+                ) : (
+                  <>Break It Down <Zap className="ml-2 h-4 w-4" /></>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+        <p className="text-center text-sm text-gray-400 mt-4">
+          Uses AI to break your task into tiny, timed steps
+        </p>
+      </div>
+    </>
   );
 }
