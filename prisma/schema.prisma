@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  subscription  Subscription?
+  taskSessions  TaskSession[]
+  usageEvents   UsageEvent[]
+
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  status               String    @default("inactive")
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+model TaskSession {
+  id                String    @id @default(cuid())
+  userId            String?
+  localSessionKey   String?
+  title             String
+  status            String    @default("ACTIVE")
+  targetMinutes     Int       @default(25)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  totalMinutesSpent Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  steps        TaskStep[]
+  reminderLogs ReminderLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([localSessionKey])
+}
+
+model TaskStep {
+  id               String   @id @default(cuid())
+  taskSessionId    String
+  order            Int
+  title            String
+  estimatedMinutes Int      @default(5)
+  actualMinutes    Int?
+  status           String   @default("PENDING")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  taskSession TaskSession @relation(fields: [taskSessionId], references: [id], onDelete: Cascade)
+
+  @@index([taskSessionId])
+  @@index([status])
+}
+
+model UsageEvent {
+  id              String   @id @default(cuid())
+  userId          String?
+  localSessionKey String?
+  type            String
+  createdAt       DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model ReminderLog {
+  id            String   @id @default(cuid())
+  taskSessionId String
+  sentAt        DateTime @default(now())
+  type          String   @default("CONTINUE_EMAIL")
+
+  taskSession TaskSession @relation(fields: [taskSessionId], references: [id], onDelete: Cascade)
+
+  @@index([taskSessionId])
+}
