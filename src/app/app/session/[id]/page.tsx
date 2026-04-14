@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, SkipForward, Loader2, Clock, Trophy, ArrowLeft } from "lucide-react";
+import { CheckCircle, SkipForward, Loader2, Clock, Trophy, ArrowLeft, Plus, Sparkles, Play } from "lucide-react";
 import { toast } from "sonner";
 
 type Step = {
@@ -24,6 +24,10 @@ type Session = {
   steps: Step[];
 };
 
+function timerKey(sessionId: string, stepId: string) {
+  return `focussteps-timer-${sessionId}-${stepId}`;
+}
+
 export default function SessionPage() {
   const params = useParams();
   const router = useRouter();
@@ -31,8 +35,12 @@ export default function SessionPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [makingEasier, setMakingEasier] = useState(false);
   const [timer, setTimer] = useState(0);
+  const [timerStarted, setTimerStarted] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
+  const [timerExpired, setTimerExpired] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -50,13 +58,52 @@ export default function SessionPage() {
 
   useEffect(() => { fetchSession(); }, [fetchSession]);
 
+  const currentStepId = session?.steps.find(
+    (s) => s.status !== "DONE" && s.status !== "SKIPPED"
+  )?.id;
+
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (timerRunning) {
-      interval = setInterval(() => setTimer((t) => t + 1), 1000);
+    if (!currentStepId || !id) return;
+    const saved = localStorage.getItem(timerKey(id, currentStepId));
+    const currentStep = session?.steps.find((s) => s.id === currentStepId);
+    if (saved) {
+      const remaining = parseInt(saved, 10);
+      if (remaining > 0) {
+        setTimer(remaining);
+        setTimerStarted(true);
+        setTimerRunning(false);
+        setTimerExpired(false);
+        return;
+      }
     }
-    return () => clearInterval(interval);
-  }, [timerRunning]);
+    setTimer((currentStep?.estimatedMinutes ?? 5) * 60);
+    setTimerStarted(false);
+    setTimerRunning(false);
+    setTimerExpired(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStepId, id]);
+
+  useEffect(() => {
+    if (timerRunning) {
+      intervalRef.current = setInterval(() => {
+        setTimer((t) => {
+          if (t <= 1) {
+            clearInterval(intervalRef.current!);
+            setTimerRunning(false);
+            setTimerExpired(true);
+            if (currentStepId && id) localStorage.removeItem(timerKey(id, currentStepId));
+            return 0;
+          }
+          const next = t - 1;
+          if (currentStepId && id) localStorage.setItem(timerKey(id, currentStepId), String(next));
+          return next;
+        });
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [timerRunning, currentStepId, id]);
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
@@ -77,22 +124,64 @@ export default function SessionPage() {
   const progress = session.steps.length > 0 ? Math.round((doneSteps.length / session.steps.length) * 100) : 0;
   const allDone = activeSteps.length === 0 && session.steps.length > 0;
 
+  function formatTime(s: number) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m.toString().padStart(2, "0") + ":" + sec.toString().padStart(2, "0");
+  }
+
+  function startTimer() {
+    setTimerStarted(true);
+    setTimerRunning(true);
+    setTimerExpired(false);
+  }
+
+  function addMoreTime() {
+    setTimer((t) => t + 300);
+    setTimerExpired(false);
+    setTimerRunning(true);
+  }
+
   async function markStepDone(stepId: string, status: "DONE" | "SKIPPED") {
     setUpdating(true);
+    const elapsed = (currentStep?.estimatedMinutes ?? 5) * 60 - timer;
+    const actualMinutes = Math.max(1, Math.round(elapsed / 60));
     try {
+      if (id) localStorage.removeItem(timerKey(id, stepId));
       await fetch("/api/task-steps/" + stepId, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, actualMinutes: Math.round(timer / 60) }),
+        body: JSON.stringify({ status, actualMinutes }),
       });
-      setTimer(0);
+      setTimerStarted(false);
       setTimerRunning(false);
+      setTimerExpired(false);
       await fetchSession();
-      if (status === "DONE") toast.success("Step complete! Great work!");
-    } catch (err) {
+      if (status === "DONE") toast.success("Great work! Step complete!");
+      else toast("Step skipped — moving on.");
+    } catch {
       toast.error("Failed to update step");
     } finally {
       setUpdating(false);
+    }
+  }
+
+  async function makeStepEasier(stepId: string) {
+    setMakingEasier(true);
+    try {
+      const res = await fetch("/api/task-steps/" + stepId + "/make-easier", { method: "POST" });
+      if (res.status === 403) { toast.error("Upgrade to Pro to use Make Easier"); return; }
+      if (!res.ok) { toast.error("Failed to simplify step"); return; }
+      if (id) localStorage.removeItem(timerKey(id, stepId));
+      await fetchSession();
+      setTimerStarted(false);
+      setTimerRunning(false);
+      setTimerExpired(false);
+      toast.success("Step broken into smaller pieces!");
+    } catch {
+      toast.error("Something went wrong");
+    } finally {
+      setMakingEasier(false);
     }
   }
 
@@ -106,12 +195,6 @@ export default function SessionPage() {
     await fetchSession();
   }
 
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return m + ":" + sec.toString().padStart(2, "0");
-  };
-
   if (allDone || session.status === "COMPLETED") {
     return (
       <div className="max-w-lg mx-auto text-center py-12">
@@ -120,9 +203,11 @@ export default function SessionPage() {
         </div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Task Complete!</h1>
         <p className="text-gray-600 mb-2">{session.title}</p>
-        <p className="text-gray-500 text-sm mb-8">You completed all {session.steps.length} steps.</p>
+        <p className="text-gray-500 text-sm mb-8">
+          You completed {doneSteps.filter(s => s.status === "DONE").length} of {session.steps.length} steps.
+        </p>
         {allDone && session.status !== "COMPLETED" && (
-          <Button onClick={completeSession} className="bg-green-600 hover:bg-green-700 mb-4">
+          <Button onClick={completeSession} className="bg-green-600 hover:bg-green-700 mb-4 w-full max-w-xs">
             Mark as Complete
           </Button>
         )}
@@ -151,7 +236,7 @@ export default function SessionPage() {
       </div>
 
       {currentStep && (
-        <Card className="mb-6 border-2 border-[#7c3aed]/20 shadow-md">
+        <Card className={"mb-6 border-2 shadow-md " + (timerExpired ? "border-red-300" : "border-[#7c3aed]/20")}>
           <CardContent className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <Badge className="bg-purple-100 text-purple-700 border-0">Current Step</Badge>
@@ -160,34 +245,66 @@ export default function SessionPage() {
               </span>
             </div>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">{currentStep.title}</h2>
-            <div className="flex items-center gap-2 mb-6">
-              {!timerRunning ? (
-                <Button onClick={() => setTimerRunning(true)} className="bg-[#7c3aed] hover:bg-[#6d28d9] flex-1">
-                  Start Timer
+
+            {!timerStarted ? (
+              <Button onClick={startTimer} className="w-full bg-[#7c3aed] hover:bg-[#6d28d9] h-12 text-base mb-4">
+                <Play className="mr-2 w-5 h-5" /> Start Step
+              </Button>
+            ) : (
+              <div className="text-center mb-4">
+                {timerExpired ? (
+                  <div>
+                    <p className="text-red-500 font-semibold text-sm mb-1">{"Time's up!"}</p>
+                    <span className="text-4xl font-mono font-bold text-red-500">00:00</span>
+                  </div>
+                ) : (
+                  <span className={"text-4xl font-mono font-bold " + (timer <= 60 ? "text-orange-500" : "text-[#7c3aed]")}>
+                    {formatTime(timer)}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {timerExpired ? (
+              <div className="space-y-2">
+                <Button
+                  onClick={() => markStepDone(currentStep.id, "DONE")}
+                  disabled={updating}
+                  className="w-full bg-green-600 hover:bg-green-700 h-12 text-base"
+                >
+                  {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle className="w-4 h-4 mr-2" /> Done!</>}
                 </Button>
-              ) : (
-                <div className="flex-1 text-center">
-                  <span className="text-2xl font-mono font-bold text-[#7c3aed]">{formatTime(timer)}</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button onClick={addMoreTime} variant="outline" className="h-10">
+                    <Plus className="w-4 h-4 mr-1" /> 5 More Min
+                  </Button>
+                  <Button onClick={() => markStepDone(currentStep.id, "SKIPPED")} disabled={updating} variant="outline" className="h-10">
+                    <SkipForward className="w-4 h-4 mr-1" /> Skip
+                  </Button>
                 </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => markStepDone(currentStep.id, "DONE")}
-                disabled={updating}
-                className="flex-1 bg-green-600 hover:bg-green-700"
-              >
-                {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle className="w-4 h-4 mr-1" /> Done!</>}
-              </Button>
-              <Button
-                onClick={() => markStepDone(currentStep.id, "SKIPPED")}
-                disabled={updating}
-                variant="outline"
-                className="gap-1"
-              >
-                <SkipForward className="w-4 h-4" /> Skip
-              </Button>
-            </div>
+                <Button
+                  onClick={() => makeStepEasier(currentStep.id)}
+                  disabled={makingEasier}
+                  variant="outline"
+                  className="w-full text-purple-700 border-purple-200 hover:bg-purple-50"
+                >
+                  {makingEasier ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
+                  Make Easier (Pro)
+                </Button>
+              </div>
+            ) : timerStarted ? (
+              <div className="flex gap-2">
+                <Button onClick={() => markStepDone(currentStep.id, "DONE")} disabled={updating} className="flex-1 bg-green-600 hover:bg-green-700">
+                  {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle className="w-4 h-4 mr-1" /> Done</>}
+                </Button>
+                <Button onClick={() => markStepDone(currentStep.id, "SKIPPED")} disabled={updating} variant="outline">
+                  <SkipForward className="w-4 h-4" />
+                </Button>
+                <Button onClick={() => makeStepEasier(currentStep.id)} disabled={makingEasier} variant="outline" className="text-purple-700 border-purple-200">
+                  {makingEasier ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       )}
@@ -196,10 +313,10 @@ export default function SessionPage() {
         {session.steps.map((step, i) => (
           <div
             key={step.id}
-            className={"flex items-center gap-3 p-3 rounded-lg text-sm " + (step.status === "DONE" ? "text-green-700 bg-green-50" : step.status === "SKIPPED" ? "text-gray-400 line-through bg-gray-50" : step === currentStep ? "text-gray-900 bg-purple-50 font-medium" : "text-gray-400 bg-gray-50")}
+            className={"flex items-center gap-3 p-3 rounded-lg text-sm " + (step.status === "DONE" ? "text-green-700 bg-green-50" : step.status === "SKIPPED" ? "text-gray-400 line-through bg-gray-50" : step.id === currentStep?.id ? "text-gray-900 bg-purple-50 font-medium" : "text-gray-400 bg-gray-50")}
           >
-            <span className={"w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 " + (step.status === "DONE" ? "bg-green-200 text-green-700" : step.status === "SKIPPED" ? "bg-gray-200 text-gray-500" : step === currentStep ? "bg-[#7c3aed] text-white" : "bg-gray-200 text-gray-500")}>
-              {step.status === "DONE" ? "OK" : (i + 1)}
+            <span className={"w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 " + (step.status === "DONE" ? "bg-green-200 text-green-700" : step.status === "SKIPPED" ? "bg-gray-200 text-gray-500" : step.id === currentStep?.id ? "bg-[#7c3aed] text-white" : "bg-gray-200 text-gray-500")}>
+              {step.status === "DONE" ? "✓" : (i + 1)}
             </span>
             {step.title}
           </div>

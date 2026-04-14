@@ -3,12 +3,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Loader2, Zap } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2, Zap, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useSessionStore } from "@/store/session";
+import { BreakdownPreview } from "@/components/BreakdownPreview";
 
 const DURATIONS = [15, 25, 45, 60];
+
+type Step = { id: string; title: string; estimatedMinutes: number; order: number; status: string };
 
 export default function NewTaskPage() {
   const router = useRouter();
@@ -16,6 +19,10 @@ export default function NewTaskPage() {
   const [title, setTitle] = useState("");
   const [targetMinutes, setTargetMinutes] = useState(25);
   const [loading, setLoading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [pageStep, setPageStep] = useState<"form" | "preview">("form");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [steps, setSteps] = useState<Step[]>([]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,14 +53,69 @@ export default function NewTaskPage() {
         throw new Error(err.error || "Failed to generate breakdown");
       }
 
-      toast.success("Task broken down! Starting your session.");
-      router.push("/app/session/" + session.id);
+      const { steps: generatedSteps } = await breakdownRes.json();
+      setSessionId(session.id);
+      setSteps(generatedSteps);
+      setPageStep("preview");
+      toast.success("Task broken down! Review your steps below.");
     } catch (err) {
       console.error(err);
       toast.error("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleRegenerate() {
+    if (!sessionId) return;
+    setRegenerating(true);
+    try {
+      const res = await fetch("/api/task-sessions/" + sessionId + "/generate-breakdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ localSessionKey: localSession.key }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        if (err.error === "USAGE_LIMIT_REACHED") {
+          toast.error("Free limit reached. Upgrade to Pro for unlimited AI breakdowns.");
+          return;
+        }
+        throw new Error("Failed to regenerate");
+      }
+      const { steps: newSteps } = await res.json();
+      setSteps(newSteps);
+      toast.success("Steps regenerated!");
+    } catch {
+      toast.error("Failed to regenerate breakdown");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  if (pageStep === "preview" && sessionId) {
+    return (
+      <div className="max-w-xl mx-auto">
+        <div className="mb-6">
+          <p className="text-sm text-gray-500 mb-1">Breaking down:</p>
+          <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+        </div>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-gray-600">{steps.length} steps · click any step to edit</p>
+          <Button
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+          >
+            {regenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Regenerate
+          </Button>
+        </div>
+        <BreakdownPreview sessionId={sessionId} initialSteps={steps} />
+      </div>
+    );
   }
 
   return (
@@ -108,7 +170,7 @@ export default function NewTaskPage() {
         </CardContent>
       </Card>
       <p className="text-center text-sm text-gray-400 mt-4">
-        Uses AI to break your task into 5-8 tiny, timed steps
+        Uses AI to break your task into tiny, timed steps
       </p>
     </div>
   );

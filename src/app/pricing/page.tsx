@@ -62,8 +62,8 @@ export default function PricingPage() {
             </div>
             <CardContent className="p-8">
               <h2 className="text-2xl font-bold mb-2">Pro</h2>
-              <div className="text-5xl font-bold mb-1">8/month</div>
-              <p className="text-gray-500 mb-6">or 60/year (save 37%)</p>
+              <div className="text-5xl font-bold mb-1">$7.99/mo</div>
+              <p className="text-gray-500 mb-6">or $39/year (save 59%)</p>
               <ul className="space-y-3 mb-8">
                 {proFeatures.map((f) => (
                   <li key={f} className="flex items-center gap-3 text-gray-700">
