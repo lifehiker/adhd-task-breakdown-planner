@@ -198,7 +198,7 @@ export default function SessionPage() {
             key={step.id}
             className={"flex items-center gap-3 p-3 rounded-lg text-sm " + (step.status === "DONE" ? "text-green-700 bg-green-50" : step.status === "SKIPPED" ? "text-gray-400 line-through bg-gray-50" : step === currentStep ? "text-gray-900 bg-purple-50 font-medium" : "text-gray-400 bg-gray-50")}
           >
-            <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 " + (step.status === "DONE" ? "bg-green-200 text-green-700" : step.status === "SKIPPED" ? "bg-gray-200 text-gray-500" : step === currentStep ? "bg-[#7c3aed] text-white" : "bg-gray-200 text-gray-500")}>
+            <span className={"w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 " + (step.status === "DONE" ? "bg-green-200 text-green-700" : step.status === "SKIPPED" ? "bg-gray-200 text-gray-500" : step === currentStep ? "bg-[#7c3aed] text-white" : "bg-gray-200 text-gray-500")}>
               {step.status === "DONE" ? "OK" : (i + 1)}
             </span>
             {step.title}
