@@ -725,9 +725,7 @@ Expected ROI:
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-# --ignore-scripts prevents postinstall hooks (e.g. prisma generate) from running
-# here where schema.prisma isn't available yet. Scripts run in the builder stage.
-RUN npm ci --ignore-scripts
+RUN npm ci
 
 # Stage 2: Build
 FROM node:20-alpine AS builder
@@ -737,8 +735,6 @@ COPY . .
 # Provide build-time defaults so the build succeeds with no env vars configured
 ENV AUTH_SECRET="build-time-placeholder-secret"
 ENV NEXT_PUBLIC_APP_URL="https://localhost:3000"
-# Run any postinstall scripts now that all source files are present
-RUN npm rebuild 2>/dev/null || true
 RUN npm run build
 
 # Stage 3: Runner
@@ -769,8 +765,7 @@ CMD ["node", "server.js"]
 # FROM node:20-alpine AS deps
 # WORKDIR /app
 # COPY package.json package-lock.json* ./
-# # --ignore-scripts prevents prisma generate from running before schema.prisma is copied
-# RUN npm ci --ignore-scripts
+# RUN npm ci
 #
 # FROM node:20-alpine AS builder
 # WORKDIR /app
@@ -779,7 +774,6 @@ CMD ["node", "server.js"]
 # ENV DATABASE_URL="file:/tmp/build.db"
 # ENV AUTH_SECRET="build-time-placeholder-secret"
 # ENV NEXT_PUBLIC_APP_URL="https://localhost:3000"
-# # Generate Prisma client now that schema.prisma is available
 # RUN npx prisma generate
 # RUN npx prisma db push
 # RUN npm run build
@@ -917,5 +911,4 @@ AUTH_SECRET="your-secret-here"  # generate with: openssl rand -base64 32
 - Do NOT add `COPY public ./public` in the Dockerfile if the public/ directory is empty or doesn't exist
 - The Dockerfile's CMD initializes the SQLite database on first start via `prisma db push`
 - App must respond healthy on port 3000 within 60 seconds of container start
-- **CRITICAL Dockerfile rule**: In the `deps` stage, always use `RUN npm ci --ignore-scripts`. Without `--ignore-scripts`, the `postinstall` hook (e.g. `prisma generate`) runs before `prisma/schema.prisma` is copied, causing the build to fail. Run `npx prisma generate` explicitly in the `builder` stage after `COPY . .`.
 
