@@ -119,14 +119,27 @@ export default async function DashboardPage() {
           )}
         </TabsContent>
         <TabsContent value="completed">
-          <div className="grid gap-4 md:grid-cols-2">
-            {completedSessions.map((s) => <SessionCard key={s.id} s={s} />)}
-          </div>
+          {completedSessions.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500 mb-4">No completed tasks yet. Keep going — you&apos;ve got this!</p>
+              <Link href="/app/new"><Button className="bg-[#7c3aed] hover:bg-[#6d28d9]">Start a New Task</Button></Link>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {completedSessions.map((s) => <SessionCard key={s.id} s={s} />)}
+            </div>
+          )}
         </TabsContent>
         <TabsContent value="abandoned">
-          <div className="grid gap-4 md:grid-cols-2">
-            {abandonedSessions.map((s) => <SessionCard key={s.id} s={s} />)}
-          </div>
+          {abandonedSessions.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500">No abandoned sessions. Great work staying on track!</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {abandonedSessions.map((s) => <SessionCard key={s.id} s={s} />)}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

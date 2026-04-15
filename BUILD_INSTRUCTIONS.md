@@ -4,29 +4,31 @@
 
 - **App Name:** adhd-task-breakdown-planner
 - **Repository:** adhd-task-breakdown-planner
-- **Tech Stack:** Next.js 15 (App Router) + TypeScript + PostgreSQL + Prisma + Tailwind + shadcn/ui + Stripe + NextAuth + Resend
+- **Tech Stack:** Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui
 - **Description:** adhd-task-breakdown-planner
 
 ---
 
 ## Tech Stack & Setup
 
-### Next.js 15 (App Router) + TypeScript + PostgreSQL + Prisma + Tailwind + shadcn/ui + Stripe + NextAuth + Resend
+### Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui
 
 ```bash
 npx create-next-app@latest adhd-task-breakdown-planner --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
 cd adhd-task-breakdown-planner
-# Core dependencies
-npm install prisma @prisma/client next-auth@beta @auth/prisma-adapter stripe resend
-npm install @stripe/stripe-js
-# shadcn/ui
+# shadcn/ui (always include)
 npx shadcn@latest init -d
 npx shadcn@latest add button card input label form toast badge
-# Initialize Prisma
-npx prisma init
-# After editing prisma/schema.prisma:
-npx prisma generate
-npx prisma db push
+# Only add Prisma if the PRD requires data persistence:
+# npm install prisma @prisma/client
+# npx prisma init
+# Only add NextAuth if the PRD requires user login:
+# npm install next-auth@beta @auth/prisma-adapter bcryptjs
+# npm install -D @types/bcryptjs
+# Only add Stripe if the PRD explicitly requires payments:
+# npm install stripe @stripe/stripe-js
+# Only add Resend if the PRD explicitly requires email:
+# npm install resend
 ```
 
 ### Configuration
@@ -714,33 +716,88 @@ Expected ROI:
 ## Dockerfile
 
 ```dockerfile
+# ============================================================
+# BASE DOCKERFILE — for apps WITHOUT a database
+# If this app uses Prisma/SQLite, see the "With Prisma" section below
+# ============================================================
+
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production
+RUN npm ci
 
 # Stage 2: Build
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Provide build-time defaults so the build succeeds with no env vars configured
+ENV AUTH_SECRET="build-time-placeholder-secret"
+ENV NEXT_PUBLIC_APP_URL="https://localhost:3000"
 RUN npm run build
 
 # Stage 3: Runner
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# Default AUTH_SECRET — app works with no Coolify env vars; override for production
+ENV AUTH_SECRET="forge-app-default-secret-override-in-production"
+ENV NEXT_PUBLIC_APP_URL=""
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
+
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 CMD ["node", "server.js"]
+
+# ============================================================
+# WITH PRISMA/SQLITE — replace the above Dockerfile entirely
+# Use this when the PRD requires data persistence or user auth
+# ============================================================
+#
+# FROM node:20-alpine AS deps
+# WORKDIR /app
+# COPY package.json package-lock.json* ./
+# RUN npm ci
+#
+# FROM node:20-alpine AS builder
+# WORKDIR /app
+# COPY --from=deps /app/node_modules ./node_modules
+# COPY . .
+# ENV DATABASE_URL="file:/tmp/build.db"
+# ENV AUTH_SECRET="build-time-placeholder-secret"
+# ENV NEXT_PUBLIC_APP_URL="https://localhost:3000"
+# RUN npx prisma generate
+# RUN npx prisma db push
+# RUN npm run build
+#
+# FROM node:20-alpine AS runner
+# WORKDIR /app
+# ENV NODE_ENV=production
+# ENV DATABASE_URL="file:/data/app.db"
+# ENV AUTH_SECRET="forge-app-default-secret-override-in-production"
+# ENV NEXT_PUBLIC_APP_URL=""
+# RUN addgroup --system --gid 1001 nodejs
+# RUN adduser --system --uid 1001 nextjs
+# RUN mkdir -p /data && chown nextjs:nodejs /data
+# COPY --from=builder /app/public ./public
+# COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+# COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+# COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+# COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+# COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+# USER nextjs
+# EXPOSE 3000
+# ENV PORT=3000
+# CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push --skip-generate && echo 'DB schema initialized' && node server.js"]
 ```
 
 ---
@@ -781,42 +838,77 @@ When the build is complete and verified:
 ## Required Files Checklist
 
 - [ ] `README.md` - Project description, setup instructions, tech stack
-- [ ] `.gitignore` - Appropriate for Next.js 15 (App Router) + TypeScript + PostgreSQL + Prisma + Tailwind + shadcn/ui + Stripe + NextAuth + Resend
+- [ ] `.gitignore` - Appropriate for Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui
 - [ ] `.env.example` - Template for required environment variables (see below)
 - [ ] `Dockerfile` - Production-ready container build
 - [ ] `package.json` (or equivalent) - Dependencies and scripts
 
 ---
 
-## Standard Environment Variables (.env.example)
+## Zero-Config Deployment Requirement
+
+**CRITICAL: This app MUST start and run correctly with NO environment variables configured in the deployment platform (Coolify). All external service dependencies must either be absent or have safe fallback defaults baked in.**
+
+Apps that crash on startup due to missing env vars will fail every deployment cycle.
+
+---
+
+## Environment Variables (.env.example)
+
+Only include variables the app actually uses. If the PRD doesn't require a feature, don't add those variables.
 
 ```bash
-# Database (PostgreSQL)
-DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
-
-# NextAuth
-AUTH_SECRET="your-secret-here"  # generate with: openssl rand -base64 32
-AUTH_GOOGLE_ID="your-google-client-id"
-AUTH_GOOGLE_SECRET="your-google-client-secret"
-
-# Stripe
-STRIPE_SECRET_KEY="sk_live_..."
-STRIPE_PUBLISHABLE_KEY="pk_live_..."
-STRIPE_WEBHOOK_SECRET="whsec_..."
-
-# Resend (email)
-RESEND_API_KEY="re_..."
-EMAIL_FROM="noreply@yourdomain.com"
-
-# App
+# App URL (optional — remove if not needed)
 NEXT_PUBLIC_APP_URL="https://yourdomain.com"
+
+# --- Only include below if PRD requires data persistence ---
+# Database (SQLite — no external service required)
+DATABASE_URL="file:./dev.db"
+
+# --- Only include below if PRD requires user login ---
+# NextAuth secret — a default is baked into the Dockerfile; override here for production
+AUTH_SECRET="your-secret-here"  # generate with: openssl rand -base64 32
+
+# --- Only include below if PRD explicitly requires payments ---
+# STRIPE_SECRET_KEY="sk_live_..."
+# NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_live_..."
+# STRIPE_WEBHOOK_SECRET="whsec_..."
+
+# --- Only include below if PRD explicitly requires email ---
+# RESEND_API_KEY="re_..."
+# EMAIL_FROM="noreply@yourdomain.com"
 ```
+
+---
 
 ## Key Implementation Notes
 
-- **Auth**: Use NextAuth v5 (beta) with the Prisma adapter and Google OAuth. Session strategy: database.
-- **Payments**: Stripe Checkout for subscriptions. Handle `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` webhooks at `/api/webhooks/stripe`.
-- **Email**: Resend for transactional email (welcome, receipts, password reset). Use React Email templates.
-- **Database**: Prisma ORM. Always include User, Account, Session, VerificationToken models for NextAuth. Add a Subscription model to track Stripe state.
-- **Deployment**: Coolify with Docker. Ensure `output: "standalone"` in next.config.ts. Do NOT include a `COPY public ./public` line in the Dockerfile if the public/ directory is empty.
+### Database (only if PRD requires persistence)
+- Use **SQLite** via Prisma: `provider = "sqlite"`, `url = env("DATABASE_URL")`
+- `DATABASE_URL` defaults to `file:/data/app.db` in the Dockerfile — no Coolify config needed
+- For local dev: `DATABASE_URL="file:./dev.db"` in `.env.local`
+- Run `npx prisma db push` after schema changes
+- **Do NOT use PostgreSQL** — no PostgreSQL server is provisioned in the deployment environment
+
+### Authentication (only if PRD requires user login)
+- Use **NextAuth v5** with the **Credentials provider** (email + password)
+- **Do NOT use Google OAuth** — no OAuth credentials are configured in deployment
+- Hash passwords with **bcrypt** (`bcryptjs` package)
+- Session strategy: **`"jwt"`** (not `"database"`) — required for Credentials provider
+- `AUTH_SECRET` defaults are baked into the Dockerfile; app works out of the box
+
+### Payments (only if PRD explicitly requires it)
+- Use Stripe only when the PRD's core functionality requires payment processing
+- If adding Stripe: handle `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` at `/api/webhooks/stripe`
+- Make the app functional without Stripe credentials (show upgrade prompts rather than crashing)
+
+### Email (only if PRD explicitly requires it)
+- Use Resend only when the PRD requires transactional email
+- Make the app functional without email credentials (log emails in dev, skip in prod if unconfigured)
+
+### Deployment
+- Coolify with Docker — always set `output: "standalone"` in next.config.ts
+- Do NOT add `COPY public ./public` in the Dockerfile if the public/ directory is empty or doesn't exist
+- The Dockerfile's CMD initializes the SQLite database on first start via `prisma db push`
+- App must respond healthy on port 3000 within 60 seconds of container start
 
