@@ -8,6 +8,8 @@ RUN npm ci --ignore-scripts
 
 # Stage 2: Build
 FROM node:20-slim AS builder
+# Install OpenSSL for Prisma schema engine (debian-openssl-3.0.x target)
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -20,6 +22,8 @@ RUN npm run build
 
 # Stage 3: Runner
 FROM node:20-slim AS runner
+# Install OpenSSL for Prisma schema engine at runtime
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 ENV DATABASE_URL="file:/data/app.db"
