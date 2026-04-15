@@ -722,23 +722,27 @@ Expected ROI:
 # ============================================================
 
 # Stage 1: Dependencies
-FROM node:20-alpine AS deps
+FROM node:20-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci
+# --ignore-scripts prevents postinstall hooks (e.g. prisma generate) from running
+# here where schema.prisma isn't available yet. Scripts run in the builder stage.
+RUN npm ci --ignore-scripts
 
 # Stage 2: Build
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Provide build-time defaults so the build succeeds with no env vars configured
 ENV AUTH_SECRET="build-time-placeholder-secret"
 ENV NEXT_PUBLIC_APP_URL="https://localhost:3000"
+# Run any postinstall scripts now that all source files are present
+RUN npm rebuild 2>/dev/null || true
 RUN npm run build
 
 # Stage 3: Runner
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 # Default AUTH_SECRET — app works with no Coolify env vars; override for production
@@ -762,23 +766,28 @@ CMD ["node", "server.js"]
 # Use this when the PRD requires data persistence or user auth
 # ============================================================
 #
-# FROM node:20-alpine AS deps
+# FROM node:20-slim AS deps
 # WORKDIR /app
 # COPY package.json package-lock.json* ./
-# RUN npm ci
+# # --ignore-scripts prevents prisma generate from running before schema.prisma is copied
+# RUN npm ci --ignore-scripts
 #
-# FROM node:20-alpine AS builder
+# FROM node:20-slim AS builder
+# # Install OpenSSL for Prisma schema engine (debian-openssl-3.0.x target)
+# RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 # WORKDIR /app
 # COPY --from=deps /app/node_modules ./node_modules
 # COPY . .
 # ENV DATABASE_URL="file:/tmp/build.db"
 # ENV AUTH_SECRET="build-time-placeholder-secret"
 # ENV NEXT_PUBLIC_APP_URL="https://localhost:3000"
+# # Generate Prisma client now that schema.prisma is available
 # RUN npx prisma generate
-# RUN npx prisma db push
 # RUN npm run build
 #
-# FROM node:20-alpine AS runner
+# FROM node:20-slim AS runner
+# # Install OpenSSL for Prisma schema engine at runtime
+# RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 # WORKDIR /app
 # ENV NODE_ENV=production
 # ENV DATABASE_URL="file:/data/app.db"
@@ -791,9 +800,8 @@ CMD ["node", "server.js"]
 # COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-# COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-# COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-# COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+# # Copy full node_modules so the Prisma CLI has all its runtime deps (v6+ requires effect, c12, etc.)
+# COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 # USER nextjs
 # EXPOSE 3000
 # ENV PORT=3000
@@ -851,6 +859,8 @@ When the build is complete and verified:
 
 Apps that crash on startup due to missing env vars will fail every deployment cycle.
 
+**CRITICAL: Never instantiate third-party API clients at module level.** Next.js evaluates top-level code during `next build` — a `new Resend(...)`, `new Stripe(...)`, or `new OpenAI(...)` call at module scope will crash the build if the API key env var is missing. Always initialize these clients **inside** the handler/function body, guarded by an env var check.
+
 ---
 
 ## Environment Variables (.env.example)
@@ -904,11 +914,34 @@ AUTH_SECRET="your-secret-here"  # generate with: openssl rand -base64 32
 
 ### Email (only if PRD explicitly requires it)
 - Use Resend only when the PRD requires transactional email
-- Make the app functional without email credentials (log emails in dev, skip in prod if unconfigured)
+- **CRITICAL: NEVER instantiate `new Resend(...)` at module level** — always inside the handler function body with a guard:
+  ```ts
+  // WRONG — causes build failure (next build evaluates module-level code):
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  export async function POST(req) { ... }
+
+  // CORRECT — lazy init inside handler:
+  export async function POST(req) {
+    if (!process.env.RESEND_API_KEY) {
+      console.log("[email] RESEND_API_KEY not set, skipping email");
+      return NextResponse.json({ ok: true });
+    }
+    const { Resend } = await import("resend");
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    ...
+  }
+  ```
+- Next.js evaluates module-level code during `next build` page data collection — missing env vars at module scope crash the build
+- Same rule applies to Stripe, OpenAI, and ALL third-party SDK clients — always lazy-initialize inside handler functions
 
 ### Deployment
 - Coolify with Docker — always set `output: "standalone"` in next.config.ts
 - Do NOT add `COPY public ./public` in the Dockerfile if the public/ directory is empty or doesn't exist
 - The Dockerfile's CMD initializes the SQLite database on first start via `prisma db push`
 - App must respond healthy on port 3000 within 60 seconds of container start
+- **CRITICAL Dockerfile rule**: In the `deps` stage, always use `RUN npm ci --ignore-scripts`. Without `--ignore-scripts`, the `postinstall` hook (e.g. `prisma generate`) runs before `prisma/schema.prisma` is copied, causing the build to fail. Run `npx prisma generate` explicitly in the `builder` stage after `COPY . .`.
+- **Do NOT run `npx prisma db push` in the Dockerfile builder stage** — it is not needed at build time. The CMD already runs `prisma db push` at container startup when a real `/data/app.db` path is available.
+- **Use `node:20-slim` (not `node:20-alpine`)** — Debian slim avoids Alpine musl/libssl issues. Add `RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*` to BOTH the builder and runner stages for Prisma's schema engine.
+- **Set `binaryTargets` in schema.prisma** — always include `binaryTargets = ["native", "debian-openssl-3.0.x"]` in the Prisma generator block so Prisma generates the correct engine binary for the Debian container environment.
+- **Copy full node_modules in the runner stage** — do NOT selectively copy `node_modules/.prisma`, `node_modules/prisma`, `node_modules/@prisma` separately. Instead use `COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules` to copy everything. Prisma v6+ CLI has deep transitive deps (`@prisma/config` → `effect`, `c12`, etc.) that break if not all present.
 
