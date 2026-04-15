@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +15,6 @@ const DURATIONS = [15, 25, 45, 60];
 type Step = { id: string; title: string; estimatedMinutes: number; order: number; status: string };
 
 export default function NewTaskPage() {
-  const router = useRouter();
   const { localSession } = useSessionStore();
   const [title, setTitle] = useState("");
   const [targetMinutes, setTargetMinutes] = useState(25);

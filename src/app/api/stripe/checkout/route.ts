@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +16,14 @@ export async function POST(req: NextRequest) {
     const priceId = body.priceId || process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-    let subscription = await prisma.subscription.findUnique({
+    const subscription = await prisma.subscription.findUnique({
       where: { userId: authSession.user.id },
     });
 
     let customerId = subscription?.stripeCustomerId;
 
     if (!customerId) {
-      const customer = await stripe.customers.create({
+      const customer = await getStripe().customers.create({
         email: authSession.user.email || undefined,
         name: authSession.user.name || undefined,
         metadata: { userId: authSession.user.id },
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const checkoutSession = await stripe.checkout.sessions.create({
+    const checkoutSession = await getStripe().checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       payment_method_types: ["card"],

@@ -1,6 +1,5 @@
 import { auth } from "@/auth";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Zap, Plus, LayoutDashboard, LogOut, User } from "lucide-react";
 import { signOut } from "@/auth";
@@ -47,6 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="gap-2">
                     {session.user.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={session.user.image} alt="" className="w-6 h-6 rounded-full" />
                     ) : (
                       <User className="w-4 h-4" />

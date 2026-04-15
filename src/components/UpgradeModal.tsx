@@ -39,7 +39,7 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
           </div>
           <DialogTitle className="text-center">Upgrade to Pro</DialogTitle>
           <DialogDescription className="text-center">
-            You've used your 5 free AI breakdowns this month. Upgrade for unlimited access.
+            You&apos;ve used your 5 free AI breakdowns this month. Upgrade for unlimited access.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 my-4">

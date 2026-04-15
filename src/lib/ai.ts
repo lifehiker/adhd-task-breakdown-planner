@@ -1,9 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || "",
-});
+function getClient(): Anthropic {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
+  return new Anthropic({ apiKey });
+}
 
 const StepSchema = z.object({
   title: z.string().min(1),
@@ -24,8 +26,7 @@ export async function generateTaskBreakdown({
   title: string;
   targetMinutes: number;
 }): Promise<TaskBreakdown> {
-  const apiKey = process.env.ANTHROPIC_API_KEY || "";
-  if (!apiKey || apiKey.startsWith("sk-ant-placeholder")) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     // Return mock data when no API key is set
     return {
       steps: [
@@ -59,7 +60,7 @@ Return ONLY valid JSON in this exact format:
   ]
 }`;
 
-  const message = await client.messages.create({
+  const message = await getClient().messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1024,
     messages: [{ role: "user", content: prompt }],
@@ -87,8 +88,7 @@ export async function makeStepEasier({
   stepTitle: string;
   context: string;
 }): Promise<TaskBreakdown> {
-  const apiKey = process.env.ANTHROPIC_API_KEY || "";
-  if (!apiKey || apiKey.startsWith("sk-ant-placeholder")) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return {
       steps: [
         { title: `Start by just looking at: ${stepTitle}`, estimatedMinutes: 2 },
@@ -113,7 +113,7 @@ Return ONLY valid JSON:
   ]
 }`;
 
-  const message = await client.messages.create({
+  const message = await getClient().messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 512,
     messages: [{ role: "user", content: prompt }],

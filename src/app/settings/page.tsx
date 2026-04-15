@@ -22,13 +22,13 @@ export default async function SettingsPage() {
 
   async function createPortalSession() {
     "use server";
-    const { stripe } = await import("@/lib/stripe");
+    const { getStripe } = await import("@/lib/stripe");
     const sub = await prisma.subscription.findUnique({
       where: { userId: session!.user!.id },
     });
     if (!sub?.stripeCustomerId) return;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const portalSession = await stripe.billingPortal.sessions.create({
+    const portalSession = await getStripe().billingPortal.sessions.create({
       customer: sub.stripeCustomerId,
       return_url: appUrl + "/settings",
     });

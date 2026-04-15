@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    event = getStripe().webhooks.constructEvent(body, signature, webhookSecret);
   } catch (err) {
     console.error("Webhook signature verification failed:", err);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
         const userId = session.metadata?.userId;
         if (!userId || !session.subscription) break;
 
-        const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+        const sub = await getStripe().subscriptions.retrieve(session.subscription as string);
 
         await prisma.subscription.upsert({
           where: { userId },
