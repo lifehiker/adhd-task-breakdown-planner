@@ -21,6 +21,7 @@ type Session = {
   title: string;
   targetMinutes: number;
   status: string;
+  totalMinutesSpent: number | null;
   steps: Step[];
 };
 
@@ -40,7 +41,10 @@ export default function SessionPage() {
   const [timerStarted, setTimerStarted] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerExpired, setTimerExpired] = useState(false);
+  const [showContinuation, setShowContinuation] = useState(false);
+  const [completedStepTitle, setCompletedStepTitle] = useState('');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const continuationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -57,6 +61,13 @@ export default function SessionPage() {
   }, [id]);
 
   useEffect(() => { fetchSession(); }, [fetchSession]);
+
+  // Clean up continuation timer on unmount
+  useEffect(() => {
+    return () => {
+      if (continuationTimerRef.current) clearTimeout(continuationTimerRef.current);
+    };
+  }, []);
 
   const currentStepId = session?.steps.find(
     (s) => s.status !== "DONE" && s.status !== "SKIPPED"
@@ -120,6 +131,8 @@ export default function SessionPage() {
 
   const activeSteps = session.steps.filter((s) => s.status !== "DONE" && s.status !== "SKIPPED");
   const doneSteps = session.steps.filter((s) => s.status === "DONE" || s.status === "SKIPPED");
+  const completedDoneSteps = session.steps.filter((s) => s.status === "DONE");
+  const skippedSteps = session.steps.filter((s) => s.status === "SKIPPED");
   const currentStep = activeSteps[0];
   const progress = session.steps.length > 0 ? Math.round((doneSteps.length / session.steps.length) * 100) : 0;
   const allDone = activeSteps.length === 0 && session.steps.length > 0;
@@ -142,10 +155,19 @@ export default function SessionPage() {
     setTimerRunning(true);
   }
 
+  function advanceFromContinuation() {
+    if (continuationTimerRef.current) clearTimeout(continuationTimerRef.current);
+    setShowContinuation(false);
+    fetchSession();
+  }
+
   async function markStepDone(stepId: string, status: "DONE" | "SKIPPED") {
     setUpdating(true);
     const elapsed = (currentStep?.estimatedMinutes ?? 5) * 60 - timer;
     const actualMinutes = Math.max(1, Math.round(elapsed / 60));
+    const isDone = status === "DONE";
+    const stepTitle = currentStep?.title ?? "";
+    const hasMoreSteps = activeSteps.length > 1;
     try {
       if (id) localStorage.removeItem(timerKey(id, stepId));
       await fetch("/api/task-steps/" + stepId, {
@@ -156,9 +178,19 @@ export default function SessionPage() {
       setTimerStarted(false);
       setTimerRunning(false);
       setTimerExpired(false);
-      await fetchSession();
-      if (status === "DONE") toast.success("Great work! Step complete!");
-      else toast("Step skipped — moving on.");
+
+      if (isDone && hasMoreSteps) {
+        setCompletedStepTitle(stepTitle);
+        setShowContinuation(true);
+        continuationTimerRef.current = setTimeout(() => {
+          setShowContinuation(false);
+          fetchSession();
+        }, 1500);
+      } else {
+        await fetchSession();
+        if (isDone) toast.success("Great work! Step complete!");
+        else toast("Step skipped — moving on.");
+      }
     } catch {
       toast.error("Failed to update step");
     } finally {
@@ -197,15 +229,41 @@ export default function SessionPage() {
 
   if (allDone || session.status === "COMPLETED") {
     return (
-      <div className="max-w-lg mx-auto text-center py-12">
+      <div className="max-w-lg mx-auto text-center py-12 animate-fade-in">
         <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
           <Trophy className="w-10 h-10 text-green-600" />
         </div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Task Complete!</h1>
-        <p className="text-gray-600 mb-2">{session.title}</p>
-        <p className="text-gray-500 text-sm mb-8">
-          You completed {doneSteps.filter(s => s.status === "DONE").length} of {session.steps.length} steps.
-        </p>
+        <p className="text-gray-700 font-medium mb-4">{session.title}</p>
+
+        <div className="flex items-center justify-center gap-3 text-sm text-gray-500 mb-2 flex-wrap">
+          <span className="flex items-center gap-1">
+            <CheckCircle className="w-4 h-4 text-green-500" />
+            <strong className="text-gray-700">{completedDoneSteps.length}</strong>&nbsp;done
+          </span>
+          {skippedSteps.length > 0 && (
+            <>
+              <span className="text-gray-300">&middot;</span>
+              <span className="flex items-center gap-1">
+                <SkipForward className="w-4 h-4 text-gray-400" />
+                <strong className="text-gray-700">{skippedSteps.length}</strong>&nbsp;skipped
+              </span>
+            </>
+          )}
+          <span className="text-gray-300">&middot;</span>
+          <span>
+            <strong className="text-gray-700">{session.steps.length}</strong>&nbsp;total
+          </span>
+        </div>
+
+        {session.totalMinutesSpent != null && session.totalMinutesSpent > 0 && (
+          <p className="text-sm text-purple-600 flex items-center justify-center gap-1 mb-6">
+            <Clock className="w-4 h-4" />
+            ~{session.totalMinutesSpent} minutes focused
+          </p>
+        )}
+        {(!session.totalMinutesSpent || session.totalMinutesSpent === 0) && <div className="mb-6" />}
+
         {allDone && session.status !== "COMPLETED" && (
           <Button onClick={completeSession} className="bg-green-600 hover:bg-green-700 mb-4 w-full max-w-xs">
             Mark as Complete
@@ -221,6 +279,25 @@ export default function SessionPage() {
 
   return (
     <div className="max-w-lg mx-auto">
+      {showContinuation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl px-8 py-10 max-w-sm w-full mx-4 text-center animate-fade-in-up">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl text-green-600">&#10003;</span>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Great work!</h2>
+            <p className="text-sm text-gray-400 line-through mb-6 leading-relaxed">{completedStepTitle}</p>
+            <p className="text-gray-600 mb-6 font-medium">Ready for the next tiny step?</p>
+            <Button
+              onClick={advanceFromContinuation}
+              className="w-full bg-[#7c3aed] hover:bg-[#6d28d9] h-12 text-base"
+            >
+              Next Step &#8594;
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 mb-6">
         <Button variant="ghost" size="sm" onClick={() => router.push("/app")} className="text-gray-500">
           <ArrowLeft className="w-4 h-4 mr-1" /> Dashboard

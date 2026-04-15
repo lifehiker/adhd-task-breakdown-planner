@@ -14,7 +14,7 @@
 ---
 
 ### 2. AI-Powered Task Breakdown
-**Description:** Claude (claude-haiku-4-5) automatically breaks any task into 3-8 concrete, actionable, verb-first steps sized to fit the session length.
+**Description:** Claude (claude-haiku-4-5-20251001) automatically breaks any task into 3-7 concrete, actionable, verb-first steps sized to fit the session length.
 **User Benefit:** Eliminates executive function overhead; users don't have to figure out where to start.
 **Status:** Completed
 **Implementation Notes:** POST /api/task-sessions/[id]/generate-breakdown calls Anthropic SDK with structured JSON output. Falls back to mock steps if no API key is present.
@@ -127,3 +127,48 @@
 **Status:** Completed
 **Implementation Notes:** /pricing static page.
 **Date Added:** 2026-04-13
+
+---
+
+### 15. Continuation Prompts Between Steps
+**Description:** After completing each step, a celebratory overlay appears ("Great work! [step title strikethrough] — Ready for the next tiny step?") with a "Next Step →" button. Auto-advances after 1.5s if no interaction.
+**User Benefit:** Reduces the critical between-step drop-off moment that ADHD users are most likely to abandon tasks.
+**Status:** Completed
+**Implementation Notes:** `showContinuation` state in session page, `continuationTimerRef` for auto-advance, overlay with `animate-fade-in-up`.
+**Date Added:** 2026-04-14
+
+---
+
+### 16. Session Completion Stats
+**Description:** Completion screen shows detailed stats: steps done, steps skipped, total steps, and minutes focused.
+**User Benefit:** Concrete proof of accomplishment — reinforces positive feelings and builds self-efficacy over time.
+**Status:** Completed
+**Implementation Notes:** `completedDoneSteps`, `skippedSteps` computed from session.steps; `totalMinutesSpent` from DB session record.
+**Date Added:** 2026-04-14
+
+---
+
+### 17. Anonymous Sessions (No Sign-in Required)
+**Description:** Users can start a task breakdown without creating an account. A `localSessionKey` (UUID) stored in localStorage links sessions to the anonymous user.
+**User Benefit:** Zero barrier to first value — no signup friction, users experience the core loop before committing.
+**Status:** Completed
+**Implementation Notes:** Zustand store with persist middleware stores `localSession.key`; passed as `x-local-session-key` header on API calls; session/step APIs accept either `userId` or `localSessionKey`.
+**Date Added:** 2026-04-14
+
+---
+
+### 18. Anonymous Usage Tracking
+**Description:** Anonymous users' AI breakdown usage is tracked by `localSessionKey` in the UsageEvent table, enforcing the 5 AI breakdowns/month free tier limit without requiring sign-in.
+**User Benefit:** Prevents abuse of the free tier while maintaining a frictionless anonymous experience.
+**Status:** Completed
+**Implementation Notes:** `getMonthlyUsageCount()` in subscription.ts queries UsageEvent by userId OR localSessionKey for current calendar month. `FREE_TIER_LIMIT = 5`.
+**Date Added:** 2026-04-14
+
+---
+
+### 19. Editorial Landing Page
+**Description:** Warm, distinctive landing page with DM Serif Display headings, cream background, amber accents, pain-point-focused copy, step-by-step how-it-works, testimonials, and pricing section.
+**User Benefit:** Communicates the product's value through emotional resonance rather than feature lists; builds trust before sign-up.
+**Status:** Completed
+**Implementation Notes:** Custom design with CSS variables, serifStyle inline styles, warm palette (#FAFAF7 cream, #fbbf24 amber), editorial offset box-shadows. No generic SaaS template.
+**Date Added:** 2026-04-14
