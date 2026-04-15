@@ -13,7 +13,6 @@ ENV DATABASE_URL="file:/tmp/build.db"
 ENV AUTH_SECRET="build-time-placeholder-secret"
 ENV NEXT_PUBLIC_APP_URL="https://localhost:3000"
 RUN npx prisma generate
-RUN npx prisma db push
 RUN npm run build
 
 # Stage 3: Runner
