@@ -76,11 +76,11 @@
 
 ---
 
-### 9. Google OAuth Authentication
-**Description:** Users sign in with Google. No password required.
-**User Benefit:** Zero-friction onboarding; no new account to remember.
+### 9. Email + Password Authentication
+**Description:** Users register and sign in with email and password. No OAuth or external provider required.
+**User Benefit:** Self-contained onboarding; works in any deployment environment without OAuth credentials.
 **Status:** Completed
-**Implementation Notes:** NextAuth v5 with @auth/prisma-adapter, Google provider. Session stored in DB.
+**Implementation Notes:** NextAuth v5 with @auth/prisma-adapter, Credentials provider, bcryptjs for hashing. JWT session strategy. Registration via POST /api/auth/register. Works with zero external credentials.
 **Date Added:** 2026-04-13
 
 ---
