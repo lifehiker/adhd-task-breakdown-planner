@@ -39,7 +39,7 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
           </div>
           <DialogTitle className="text-center">Upgrade to Pro</DialogTitle>
           <DialogDescription className="text-center">
-            You have reached your free limit of 5 AI breakdowns this month.
+            You've used your 5 free AI breakdowns this month. Upgrade for unlimited access.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 my-4">
@@ -60,7 +60,7 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
             disabled={loading}
             className="w-full bg-[#7c3aed] hover:bg-[#6d28d9]"
           >
-            {loading ? "Loading..." : "Upgrade to Pro - 8/month"}
+            {loading ? "Loading..." : "Get Pro — $7.99/month"}
           </Button>
           <Button variant="ghost" onClick={onClose} className="w-full text-gray-500">
             Maybe later
