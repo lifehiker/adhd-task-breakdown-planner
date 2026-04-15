@@ -1,7 +1,3 @@
-import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function sendContinueSessionEmail({
   to,
   sessionTitle,
@@ -13,6 +9,13 @@ export async function sendContinueSessionEmail({
   sessionId: string;
   appUrl: string;
 }) {
+  if (!process.env.RESEND_API_KEY) {
+    console.log("[email] RESEND_API_KEY not set, skipping email");
+    return;
+  }
+
+  const { Resend } = await import("resend");
+  const resend = new Resend(process.env.RESEND_API_KEY);
   const resumeUrl = `${appUrl}/app/session/${sessionId}`;
 
   try {
