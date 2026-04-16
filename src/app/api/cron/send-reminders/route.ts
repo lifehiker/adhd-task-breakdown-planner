@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     for (const session of activeSessions) {
       if (!session.user?.email || !session.userId) continue;
-      if (session.reminderLogs.length > 0) continue;
+      if ((session.reminderLogs?.length ?? 0) > 0) continue;
       if (!(await isUserPro(session.userId))) continue;
 
       await sendContinueSessionEmail({

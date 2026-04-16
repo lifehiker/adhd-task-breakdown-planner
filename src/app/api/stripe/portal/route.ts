@@ -11,6 +11,9 @@ export async function POST() {
     if (!authSession?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: "Stripe billing is not configured" }, { status: 503 });
+    }
 
     const subscription = await prisma.subscription.findUnique({
       where: { userId: authSession.user.id },

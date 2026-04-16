@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { makeStepEasier } from "@/lib/ai";
 import { isUserPro } from "@/lib/subscription";
+import { canAccessTaskSession } from "@/lib/task-access";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ stepId
       include: { taskSession: true },
     });
     if (!step) return NextResponse.json({ error: "Step not found" }, { status: 404 });
+    if (!step.taskSession) {
+      return NextResponse.json({ error: "Session not found for step" }, { status: 404 });
+    }
+
+    const localSessionKey = req.headers.get("x-local-session-key");
+    if (!canAccessTaskSession({
+      taskSession: step.taskSession,
+      userId,
+      localSessionKey,
+    })) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
 
     const breakdown = await makeStepEasier({
       stepTitle: step.title,

@@ -3,9 +3,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trash2, Plus, Play } from "lucide-react";
+import { Trash2, Plus, Play, RotateCcw, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { getLocalSessionHeaders, getLocalSessionKey } from "@/lib/local-session-client";
 
 type Step = { id: string; title: string; estimatedMinutes: number; order: number; status: string };
 
@@ -20,22 +21,33 @@ export function BreakdownPreview({ sessionId, initialSteps }: BreakdownPreviewPr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addingStep, setAddingStep] = useState(false);
   const [newStepTitle, setNewStepTitle] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
 
   async function deleteStep(stepId: string) {
-    await fetch("/api/task-steps/" + stepId, { method: "DELETE" });
-    setSteps(steps.filter((s) => s.id !== stepId));
-    toast("Step removed");
+    try {
+      const res = await fetch("/api/task-steps/" + stepId, { method: "DELETE", headers: getLocalSessionHeaders() });
+      if (!res.ok) throw new Error("Failed to delete step");
+      setSteps((current) => current.filter((s) => s.id !== stepId));
+      toast.success("Step removed");
+    } catch {
+      toast.error("Could not remove that step");
+    }
   }
 
   async function updateStep(stepId: string, title: string) {
     if (!title.trim()) return;
-    await fetch("/api/task-steps/" + stepId, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: title.trim() }),
-    });
-    setSteps(steps.map((s) => (s.id === stepId ? { ...s, title: title.trim() } : s)));
-    setEditingId(null);
+    try {
+      const res = await fetch("/api/task-steps/" + stepId, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
+        body: JSON.stringify({ title: title.trim() }),
+      });
+      if (!res.ok) throw new Error("Failed to update step");
+      setSteps((current) => current.map((s) => (s.id === stepId ? { ...s, title: title.trim() } : s)));
+      setEditingId(null);
+    } catch {
+      toast.error("Could not save that edit");
+    }
   }
 
   async function addStep() {
@@ -43,12 +55,12 @@ export function BreakdownPreview({ sessionId, initialSteps }: BreakdownPreviewPr
     try {
       const res = await fetch("/api/task-sessions/" + sessionId + "/steps", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
         body: JSON.stringify({ title: newStepTitle.trim(), estimatedMinutes: 5 }),
       });
       if (!res.ok) throw new Error("Failed to add step");
       const step = await res.json();
-      setSteps([...steps, step]);
+      setSteps((current) => [...current, step]);
       setNewStepTitle("");
       setAddingStep(false);
       toast.success("Step added");
@@ -62,13 +74,51 @@ export function BreakdownPreview({ sessionId, initialSteps }: BreakdownPreviewPr
     router.push("/app/session/" + sessionId);
   }
 
+  async function regenerateBreakdown() {
+    setRegenerating(true);
+    try {
+      const res = await fetch("/api/task-sessions/" + sessionId + "/generate-breakdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
+        body: JSON.stringify({ localSessionKey: getLocalSessionKey() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error === "USAGE_LIMIT_REACHED" ? "Free limit reached. Upgrade to Pro for more AI breakdowns." : "Could not regenerate breakdown");
+        return;
+      }
+
+      setSteps(data.steps ?? []);
+      toast.success("Fresh breakdown ready");
+    } catch {
+      toast.error("Failed to regenerate breakdown");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 rounded-[1.5rem] border border-line bg-white/65 px-4 py-3">
+        <p className="text-sm text-ink-soft">Edit the steps, add one manually, or ask for a fresh AI pass.</p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={regenerateBreakdown}
+          disabled={regenerating}
+          className="rounded-full border-line bg-white/80 text-ink"
+        >
+          {regenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+          Regenerate
+        </Button>
+      </div>
+
       <div className="space-y-2">
         {steps.map((step, i) => (
-          <Card key={step.id} className="border border-gray-100 hover:border-purple-200 transition-colors">
-            <CardContent className="p-3 flex items-center gap-3">
-              <span className="w-6 h-6 rounded-full bg-[#7c3aed] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+          <Card key={step.id} className="focus-card border border-line transition-transform hover:-translate-y-0.5">
+            <CardContent className="flex items-center gap-3 p-4">
+              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-teal text-xs font-bold text-white">{i + 1}</span>
               {editingId === step.id ? (
                 <Input
                   defaultValue={step.title}
@@ -77,22 +127,24 @@ export function BreakdownPreview({ sessionId, initialSteps }: BreakdownPreviewPr
                     if (e.key === "Enter") updateStep(step.id, (e.target as HTMLInputElement).value);
                     if (e.key === "Escape") setEditingId(null);
                   }}
-                  className="h-7 text-sm flex-1"
+                  className="h-8 flex-1 border-line bg-white/80 text-sm"
                   autoFocus
                 />
               ) : (
-                <span
-                  className="flex-1 text-sm text-gray-800 cursor-pointer hover:text-[#7c3aed] transition-colors"
+                <button
+                  type="button"
+                  className="flex-1 text-left text-sm text-ink transition-colors hover:text-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e6a67]/30"
                   onClick={() => setEditingId(step.id)}
-                  title="Click to edit"
+                  title="Edit step"
                 >
                   {step.title}
-                </span>
+                </button>
               )}
-              <span className="text-xs text-gray-400 flex-shrink-0">{step.estimatedMinutes}m</span>
+              <span className="flex-shrink-0 text-xs text-ink-soft">{step.estimatedMinutes}m</span>
               <button
+                type="button"
                 onClick={() => deleteStep(step.id)}
-                className="text-gray-300 hover:text-red-400 flex-shrink-0 transition-colors"
+                className="flex-shrink-0 text-ink-soft/50 transition-colors hover:text-red-500"
                 title="Remove step"
               >
                 <Trash2 className="w-4 h-4" />
@@ -102,9 +154,9 @@ export function BreakdownPreview({ sessionId, initialSteps }: BreakdownPreviewPr
         ))}
 
         {addingStep ? (
-          <Card className="border-2 border-[#7c3aed]/30 border-dashed">
-            <CardContent className="p-3 flex items-center gap-3">
-              <span className="w-6 h-6 rounded-full bg-gray-200 text-gray-500 text-xs font-bold flex items-center justify-center flex-shrink-0">{steps.length + 1}</span>
+          <Card className="border-2 border-dashed border-line bg-white/70">
+            <CardContent className="flex items-center gap-3 p-4">
+              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[#f0e4d0] text-xs font-bold text-ink-soft">{steps.length + 1}</span>
               <Input
                 value={newStepTitle}
                 onChange={(e) => setNewStepTitle(e.target.value)}
@@ -113,21 +165,22 @@ export function BreakdownPreview({ sessionId, initialSteps }: BreakdownPreviewPr
                   if (e.key === "Escape") { setAddingStep(false); setNewStepTitle(""); }
                 }}
                 placeholder="Describe the step (start with a verb)..."
-                className="h-7 text-sm flex-1"
+                className="h-8 flex-1 border-line bg-white/80 text-sm"
                 autoFocus
               />
-              <button onClick={addStep} className="text-[#7c3aed] hover:text-[#6d28d9] flex-shrink-0 font-medium text-xs">
+              <button type="button" onClick={addStep} className="flex-shrink-0 text-xs font-medium text-teal hover:text-[#175553]">
                 Add
               </button>
-              <button onClick={() => { setAddingStep(false); setNewStepTitle(""); }} className="text-gray-300 hover:text-gray-500 flex-shrink-0">
+              <button type="button" onClick={() => { setAddingStep(false); setNewStepTitle(""); }} className="flex-shrink-0 text-ink-soft/50 hover:text-ink-soft">
                 <Trash2 className="w-4 h-4" />
               </button>
             </CardContent>
           </Card>
         ) : (
           <button
+            type="button"
             onClick={() => setAddingStep(true)}
-            className="w-full flex items-center gap-2 p-3 rounded-lg border-2 border-dashed border-gray-200 text-gray-400 hover:border-purple-300 hover:text-[#7c3aed] transition-colors text-sm"
+            className="flex w-full items-center gap-2 rounded-[1.3rem] border-2 border-dashed border-line p-4 text-sm text-ink-soft transition-colors hover:border-[#1e6a67]/35 hover:text-teal"
           >
             <Plus className="w-4 h-4" /> Add a step manually
           </button>
@@ -137,7 +190,7 @@ export function BreakdownPreview({ sessionId, initialSteps }: BreakdownPreviewPr
       <Button
         onClick={startSession}
         disabled={steps.length === 0}
-        className="w-full bg-[#7c3aed] hover:bg-[#6d28d9] h-12 text-base shadow-md shadow-purple-100"
+        className="h-12 w-full rounded-full bg-clay text-base text-white hover:bg-[#b45630]"
       >
         <Play className="mr-2 w-5 h-5" /> Start Session
       </Button>

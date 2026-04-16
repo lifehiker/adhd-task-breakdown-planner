@@ -14,6 +14,9 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const priceId = body.priceId || process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY;
+    if (!process.env.STRIPE_SECRET_KEY || !priceId) {
+      return NextResponse.json({ error: "Stripe billing is not configured" }, { status: 503 });
+    }
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
     const subscription = await prisma.subscription.findUnique({

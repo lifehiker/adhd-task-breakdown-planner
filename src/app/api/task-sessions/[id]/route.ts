@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { canAccessTaskSession } from "@/lib/task-access";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,12 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     });
     if (!taskSession) return NextResponse.json({ error: "Session not found" }, { status: 404 });
     const authSession = await auth();
-    if (taskSession.userId && taskSession.userId !== authSession?.user?.id) {
+    const localSessionKey = req.headers.get("x-local-session-key");
+    if (!canAccessTaskSession({
+      taskSession,
+      userId: authSession?.user?.id,
+      localSessionKey,
+    })) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
     return NextResponse.json(taskSession);
@@ -32,6 +38,22 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
+    const authSession = await auth();
+    const existing = await prisma.taskSession.findUnique({
+      where: { id },
+      select: { id: true, userId: true, localSessionKey: true },
+    });
+    if (!existing) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+
+    const localSessionKey = req.headers.get("x-local-session-key");
+    if (!canAccessTaskSession({
+      taskSession: existing,
+      userId: authSession?.user?.id,
+      localSessionKey,
+    })) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     const body = await req.json();
     const data = UpdateSessionSchema.parse(body);
     const updateData: Record<string, unknown> = {};

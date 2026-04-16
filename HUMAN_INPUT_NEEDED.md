@@ -1,66 +1,48 @@
 # Human Input Needed
 
-The app runs out of the box with zero configuration. The credentials below unlock optional and premium features.
+The app now builds cleanly, but a few account and billing flows cannot be fully exercised in this environment without configuration.
 
-## Recommended — AI Task Breakdown (Core Feature)
+## Required for account auth
 
-### Anthropic API Key
-- **Variable**: `ANTHROPIC_API_KEY`
-- **How to get it**: Sign up at https://console.anthropic.com, create an API key (starts with `sk-ant-`)
-- **Without this**: App uses 5 generic placeholder steps — still functional, not personalized
-- **Where to add**: Coolify environment variables or `.env.local` for local dev
+- `DATABASE_URL`
+  Set this in `.env.local`. For local development, `file:./dev.db` matches the repo example.
 
-## Optional — Subscriptions / Payments (Stripe)
+- `AUTH_SECRET`
+  Generate one with `openssl rand -base64 32` and set it in `.env.local`.
 
-Without Stripe, the app works in free-tier mode only — upgrade flows show but do not process.
+## Optional for Google sign-in
 
-1. **`STRIPE_SECRET_KEY`** — Stripe Dashboard > Developers > API Keys
-2. **`STRIPE_WEBHOOK_SECRET`** — Stripe Dashboard > Webhooks > Add endpoint > `https://yourdomain.com/api/webhooks/stripe`
-3. **`NEXT_PUBLIC_STRIPE_PRICE_MONTHLY`** — Create product at $7.99/month, copy the price ID
-4. **`NEXT_PUBLIC_STRIPE_PRICE_YEARLY`** — Create product at $39/year, copy the price ID
+- `AUTH_GOOGLE_ID`
+- `AUTH_GOOGLE_SECRET`
+  Create OAuth credentials in Google Cloud Console, then add both to `.env.local` if you want Google login enabled.
 
-Required webhook events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+## Optional for live AI breakdowns
 
-## Optional — Email Reminders (Resend)
+- `ANTHROPIC_API_KEY`
+  Add this to `.env.local` if you want real AI-generated task breakdowns and "make easier" suggestions. Without it, the app falls back to mock step data so the core flow still works.
 
-Without Resend, continuation reminder emails are silently skipped.
+## Optional for Stripe checkout and billing portal
 
-1. **`RESEND_API_KEY`** — Sign up at https://resend.com, create an API key
-2. **`EMAIL_FROM`** — A verified sender address (e.g. `noreply@yourdomain.com`). Must verify your domain in Resend first.
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `NEXT_PUBLIC_STRIPE_PRICE_MONTHLY`
+- `NEXT_PUBLIC_STRIPE_PRICE_YEARLY`
+- `NEXT_PUBLIC_APP_URL`
+  Create the Stripe products and prices, then copy the IDs and keys into `.env.local`.
 
-## Production Security
+## Optional for reminder emails
 
-### Auth Secret
-- **Variable**: `AUTH_SECRET`
-- **Generate with**: `openssl rand -base64 32`
-- **Default**: A placeholder is in `.env` — override it in Coolify for production
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+  Add these if you want reminder delivery to work.
 
-### App URL (for email links)
-- **Variable**: `NEXT_PUBLIC_APP_URL`
-- **Example**: `https://focussteps.app`
+## Optional for protected cron access
 
-## Optional — Cron Protection
-- **Variable**: `CRON_SECRET`
-- Protects `/api/cron/send-reminders`. Pass as `Authorization: Bearer <secret>` in Coolify cron job.
+- `CRON_SECRET`
+  Add this if you want to lock down the reminder cron endpoint in non-local environments.
 
-## Summary
+## After adding env vars
 
-| Variable | Required | Without it |
-|----------|----------|-----------|
-| `ANTHROPIC_API_KEY` | Recommended | Generic mock steps used |
-| `STRIPE_SECRET_KEY` | For payments | No subscription upgrades |
-| `STRIPE_WEBHOOK_SECRET` | For payments | Webhooks fail verification |
-| `NEXT_PUBLIC_STRIPE_PRICE_MONTHLY` | For payments | Monthly plan unavailable |
-| `NEXT_PUBLIC_STRIPE_PRICE_YEARLY` | For payments | Annual plan unavailable |
-| `RESEND_API_KEY` | For emails | Reminder emails skipped |
-| `EMAIL_FROM` | For emails | Reminder emails skipped |
-| `AUTH_SECRET` | Production | Default used (override recommended) |
-| `NEXT_PUBLIC_APP_URL` | For links | Links point to localhost |
-| `CRON_SECRET` | Optional | Cron endpoint unprotected |
-| `DATABASE_URL` | Auto-set in Docker | `file:/data/app.db` used |
-
-## Database
-Uses **SQLite** stored at `/data/app.db` in the Docker container (persisted via Coolify volume). No external database service needed.
-
-## Authentication
-Uses **email + password** authentication. Users register directly on the `/login` page. No OAuth credentials needed.
+1. Restart the dev server.
+2. If this is the first local database setup, run Prisma migrations or database setup for the project.
+3. Re-test `/login`, registration, billing, and reminders.

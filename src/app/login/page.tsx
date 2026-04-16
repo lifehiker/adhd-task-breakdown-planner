@@ -1,138 +1,102 @@
-"use client";
-import { useState } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Zap, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { toast } from "sonner";
+import { Suspense } from "react";
+import { ArrowRight, Clock3, Sparkles, Zap } from "lucide-react";
+import { isPrismaAvailable } from "@/lib/db";
+import { AuthPanel } from "@/components/AuthPanel";
+import { Button } from "@/components/ui/button";
+
+const googleEnabled =
+  Boolean(process.env.AUTH_GOOGLE_ID) && Boolean(process.env.AUTH_GOOGLE_SECRET);
+
+function AuthPanelFallback() {
+  return (
+    <div className="focus-panel rounded-[2rem] border border-line p-6 md:p-7">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="space-y-4">
+          <div className="h-8 w-36 rounded-full bg-white/70" />
+          <div className="h-12 w-64 rounded-2xl bg-white/70" />
+        </div>
+        <div className="hidden h-10 w-28 rounded-full bg-white/70 md:block" />
+      </div>
+      <div className="space-y-4">
+        <div className="h-14 rounded-[1.2rem] bg-white/75" />
+        <div className="h-14 rounded-[1.2rem] bg-white/75" />
+        <div className="h-14 rounded-full bg-[rgba(30,106,103,0.18)]" />
+      </div>
+    </div>
+  );
+}
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email || !password) { toast.error("Please fill in all fields"); return; }
-    setLoading(true);
-    try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-      if (result?.error) {
-        toast.error("Invalid email or password");
-      } else {
-        router.push("/app");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleRegister(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email || !password) { toast.error("Please fill in all fields"); return; }
-    if (password.length < 6) { toast.error("Password must be at least 6 characters"); return; }
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Registration failed");
-        return;
-      }
-      const result = await signIn("credentials", { email, password, redirect: false });
-      if (result?.error) {
-        toast.error("Account created — please sign in");
-        setMode("login");
-      } else {
-        router.push("/app");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-[#7c3aed] flex items-center justify-center">
-            <Zap className="w-6 h-6 text-white" />
+    <div className="min-h-screen px-5 py-5 md:px-8">
+      <header className="mx-auto flex max-w-6xl items-center justify-between rounded-full border border-line bg-white/65 px-4 py-3 backdrop-blur md:px-6">
+        <Link href="/" className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal text-white shadow-glow">
+            <Zap className="h-4 w-4" />
           </div>
-          <span className="font-bold text-2xl text-gray-900">FocusSteps</span>
-        </div>
-        <Card className="border-0 shadow-lg">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">{mode === "login" ? "Sign in to FocusSteps" : "Create your account"}</CardTitle>
-            <CardDescription>{mode === "login" ? "Save your progress and access your sessions from anywhere." : "Start tracking your tasks and building focus habits."}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <form onSubmit={mode === "login" ? handleLogin : handleRegister} className="space-y-4">
-              {mode === "register" && (
-                <Input
-                  type="text"
-                  placeholder="Your name (optional)"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  disabled={loading}
-                />
-              )}
-              <Input
-                type="email"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-              />
-              <Input
-                type="password"
-                placeholder="Password (min 6 characters)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-              />
-              <Button type="submit" className="w-full bg-[#7c3aed] hover:bg-[#6d28d9]" size="lg" disabled={loading}>
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === "login" ? "Sign In" : "Create Account"}
-              </Button>
-            </form>
-            <div className="text-center text-sm text-gray-500">
-              {mode === "login" ? (
-                <>No account?{" "}<button onClick={() => setMode("register")} className="text-[#7c3aed] hover:underline font-medium">Create one</button></>
-              ) : (
-                <>Already have one?{" "}<button onClick={() => setMode("login")} className="text-[#7c3aed] hover:underline font-medium">Sign in</button></>
-              )}
-            </div>
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-gray-400">or</span>
+          <div>
+            <p className="font-display text-2xl leading-none text-ink">FocusSteps</p>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-ink-soft">Task initiation atelier</p>
+          </div>
+        </Link>
+        <Link href="/app/new">
+          <Button variant="outline" className="rounded-full border-line bg-white/75 text-ink">
+            Try local mode
+          </Button>
+        </Link>
+      </header>
+
+      <main className="mx-auto mt-8 grid max-w-6xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+        <section className="animate-fade-in-up rounded-[2.2rem] border border-line bg-[#16313a] p-6 text-white shadow-glow md:p-8">
+          <div className="focus-kicker mb-6 border-white/10 bg-white/10 text-white/72">
+            <Sparkles className="h-3.5 w-3.5" />
+            Account benefits
+          </div>
+          <h1 className="font-display text-5xl leading-[0.92] tracking-[-0.03em] md:text-7xl">
+            Keep the next tiny step
+            <span className="block text-[#f0c2ad]">waiting for you tomorrow.</span>
+          </h1>
+          <p className="mt-6 max-w-md text-lg leading-8 text-white/72">
+            Local mode is fast. Accounts add memory: saved history, billing, and reminders without making the product heavier.
+          </p>
+
+          <div className="mt-8 space-y-3">
+            {[
+              "Resume sessions across devices once you sign in.",
+              "Upgrade to Pro when you need unlimited AI breakdowns.",
+              "Add reminder emails without losing the one-task workflow.",
+            ].map((item, index) => (
+              <div key={item} className="flex items-start gap-3 rounded-[1.35rem] border border-white/12 bg-white/8 px-4 py-4">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/12 text-xs font-semibold">
+                  0{index + 1}
+                </span>
+                <p className="text-sm leading-6 text-white/78">{item}</p>
               </div>
+            ))}
+          </div>
+
+          <div className="mt-8 rounded-[1.5rem] border border-white/12 bg-white/7 p-5">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-white/55">
+              <Clock3 className="h-4 w-4" />
+              Local mode still available
             </div>
-            <Button onClick={() => router.push("/app/new")} variant="ghost" size="lg" className="w-full text-gray-600">
-              Continue without account
-            </Button>
-            <p className="text-center text-xs text-gray-400">Your sessions will be saved locally without an account.</p>
-          </CardContent>
-        </Card>
-        <p className="text-center mt-6 text-sm text-gray-500">
-          <Link href="/" className="hover:text-gray-700">Back to home</Link>
-        </p>
-      </div>
+            <p className="mt-3 text-sm leading-6 text-white/72">
+              If you just need to start the task right now, skip the account and go straight into a fresh session.
+            </p>
+            <Link href="/app/new" className="mt-4 inline-flex items-center text-sm text-[#f0c2ad]">
+              Start without signing in
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </div>
+        </section>
+
+        <section className="animate-fade-in-up delay-200">
+          <Suspense fallback={<AuthPanelFallback />}>
+            <AuthPanel credentialsEnabled={isPrismaAvailable} googleEnabled={googleEnabled} />
+          </Suspense>
+        </section>
+      </main>
     </div>
   );
 }

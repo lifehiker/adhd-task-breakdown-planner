@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, SkipForward, Loader2, Clock, Trophy, ArrowLeft, Plus, Sparkles, Play } from "lucide-react";
 import { toast } from "sonner";
+import { getLocalSessionHeaders, rememberLocalSessionId } from "@/lib/local-session-client";
 
 type Step = {
   id: string;
@@ -18,6 +19,7 @@ type Step = {
 
 type Session = {
   id: string;
+  userId?: string | null;
   title: string;
   targetMinutes: number;
   status: string;
@@ -48,10 +50,11 @@ export default function SessionPage() {
 
   const fetchSession = useCallback(async () => {
     try {
-      const res = await fetch("/api/task-sessions/" + id);
+      const res = await fetch("/api/task-sessions/" + id, { headers: getLocalSessionHeaders() });
       if (res.ok) {
         const data = await res.json();
         setSession(data);
+        rememberLocalSessionId(data.id);
       }
     } catch (err) {
       console.error(err);
@@ -172,7 +175,7 @@ export default function SessionPage() {
       if (id) localStorage.removeItem(timerKey(id, stepId));
       await fetch("/api/task-steps/" + stepId, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
         body: JSON.stringify({ status, actualMinutes }),
       });
       setTimerStarted(false);
@@ -201,7 +204,10 @@ export default function SessionPage() {
   async function makeStepEasier(stepId: string) {
     setMakingEasier(true);
     try {
-      const res = await fetch("/api/task-steps/" + stepId + "/make-easier", { method: "POST" });
+      const res = await fetch("/api/task-steps/" + stepId + "/make-easier", {
+        method: "POST",
+        headers: getLocalSessionHeaders(),
+      });
       if (res.status === 403) { toast.error("Upgrade to Pro to use Make Easier"); return; }
       if (!res.ok) { toast.error("Failed to simplify step"); return; }
       if (id) localStorage.removeItem(timerKey(id, stepId));
@@ -220,11 +226,29 @@ export default function SessionPage() {
   async function completeSession() {
     await fetch("/api/task-sessions/" + id, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
       body: JSON.stringify({ status: "COMPLETED" }),
     });
     toast.success("Session completed! Amazing work!");
     await fetchSession();
+  }
+
+  async function setStepDuration(stepId: string, minutes: number) {
+    try {
+      const res = await fetch("/api/task-steps/" + stepId, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
+        body: JSON.stringify({ estimatedMinutes: minutes }),
+      });
+      if (!res.ok) throw new Error("Failed to update step length");
+      await fetchSession();
+      setTimer(minutes * 60);
+      setTimerStarted(false);
+      setTimerRunning(false);
+      setTimerExpired(false);
+    } catch {
+      toast.error("Could not update step duration");
+    }
   }
 
   if (allDone || session.status === "COMPLETED") {
@@ -273,6 +297,17 @@ export default function SessionPage() {
           <Button onClick={() => router.push("/app/new")} className="bg-[#7c3aed] hover:bg-[#6d28d9]">Start Another Task</Button>
           <Button variant="outline" onClick={() => router.push("/app")}>Dashboard</Button>
         </div>
+        {!session.userId && (
+          <div className="mt-6 rounded-2xl border border-line bg-white/70 p-5 text-left">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-ink-soft">Save this progress across devices</p>
+            <p className="mt-2 text-sm leading-6 text-ink-soft">
+              You finished this session in local mode. Create an account when you want sync, billing, and reminder emails.
+            </p>
+            <Button onClick={() => router.push("/login")} className="mt-4 rounded-full bg-clay text-white hover:bg-[#b45630]">
+              Create account
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -322,6 +357,25 @@ export default function SessionPage() {
               </span>
             </div>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">{currentStep.title}</h2>
+
+            {!timerStarted && (
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Step length</p>
+                <div className="flex gap-2">
+                  {[5, 10, 15].map((minutes) => (
+                    <Button
+                      key={minutes}
+                      type="button"
+                      variant={currentStep.estimatedMinutes === minutes ? "default" : "outline"}
+                      className={currentStep.estimatedMinutes === minutes ? "bg-[#7c3aed] hover:bg-[#6d28d9]" : ""}
+                      onClick={() => setStepDuration(currentStep.id, minutes)}
+                    >
+                      {minutes} min
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {!timerStarted ? (
               <Button onClick={startTimer} className="w-full bg-[#7c3aed] hover:bg-[#6d28d9] h-12 text-base mb-4">

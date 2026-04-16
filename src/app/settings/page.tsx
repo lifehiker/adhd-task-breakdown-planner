@@ -35,89 +35,116 @@ export default async function SettingsPage() {
     redirect(portalSession.url);
   }
 
+  async function handleSignOut() {
+    "use server";
+    await signOut({ redirectTo: "/" });
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white border-b border-gray-100 px-6 py-3 sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link href="/app" className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#7c3aed] flex items-center justify-center">
-                <Zap className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-bold text-gray-900">FocusSteps</span>
-            </Link>
-            <div className="flex items-center gap-1">
-              <Link href="/app">
-                <Button variant="ghost" size="sm" className="gap-1.5 text-gray-600 hover:text-gray-900">
-                  <LayoutDashboard className="w-4 h-4" />
-                  Dashboard
-                </Button>
-              </Link>
-              <Link href="/app/new">
-                <Button variant="ghost" size="sm" className="gap-1.5 text-gray-600 hover:text-gray-900">
-                  <Plus className="w-4 h-4" />
-                  New Task
-                </Button>
-              </Link>
+    <div className="min-h-screen px-5 py-5 md:px-8">
+      <nav className="focus-panel sticky top-4 z-40 mx-auto flex max-w-6xl items-center justify-between rounded-[2rem] px-4 py-4 md:px-6">
+        <div className="flex items-center gap-6">
+          <Link href="/app" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal text-white shadow-glow">
+              <Zap className="h-4 w-4" />
             </div>
+            <div>
+              <p className="font-display text-3xl leading-none text-ink">FocusSteps</p>
+              <p className="text-[10px] uppercase tracking-[0.28em] text-ink-soft">Account settings</p>
+            </div>
+          </Link>
+          <div className="hidden items-center gap-1 md:flex">
+            <Link href="/app">
+              <Button variant="ghost" size="sm" className="gap-1.5 rounded-full text-ink">
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard
+              </Button>
+            </Link>
+            <Link href="/app/new">
+              <Button variant="ghost" size="sm" className="gap-1.5 rounded-full text-ink">
+                <Plus className="w-4 h-4" />
+                New Task
+              </Button>
+            </Link>
           </div>
-          <form action={async () => { "use server"; await signOut({ redirectTo: "/" }); }}>
-            <Button type="submit" variant="ghost" size="sm" className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50">
-              <LogOut className="w-4 h-4" /> Sign out
-            </Button>
-          </form>
         </div>
+        <form action={handleSignOut}>
+          <Button type="submit" variant="outline" size="sm" className="gap-1.5 rounded-full border-line bg-white/75 text-red-700">
+            <LogOut className="w-4 h-4" /> Sign out
+          </Button>
+        </form>
       </nav>
-      <main className="max-w-5xl mx-auto px-6 py-8">
-        <div className="max-w-2xl">
-          <h1 className="text-2xl font-bold text-gray-900 mb-8">Settings</h1>
-          <div className="space-y-6">
-            <Card>
-              <CardHeader><CardTitle>Profile</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-4">
-                  {session.user.image && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={session.user.image} alt="" className="w-12 h-12 rounded-full" />
-                  )}
-                  <div>
-                    <p className="font-medium text-gray-900">{session.user.name}</p>
-                    <p className="text-sm text-gray-500">{session.user.email}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Subscription</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Badge className={isPro ? "bg-[#7c3aed] text-white border-0" : "bg-gray-100 text-gray-600 border-0"}>
-                    {isPro ? "Pro" : "Free Plan"}
-                  </Badge>
-                  {isPro && subscription?.currentPeriodEnd && (
-                    <span className="text-sm text-gray-500">
-                      Renews {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-                {isPro ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-gray-600">You have unlimited AI breakdowns and all Pro features.</p>
-                    <form action={createPortalSession}>
-                      <Button type="submit" variant="outline">Manage Billing</Button>
-                    </form>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-sm text-gray-600">Upgrade to Pro for unlimited AI breakdowns and more.</p>
-                    <Link href="/pricing">
-                      <Button className="bg-[#7c3aed] hover:bg-[#6d28d9]">Upgrade to Pro</Button>
-                    </Link>
-                  </div>
+
+      <main className="mx-auto max-w-6xl py-10">
+        <div className="mb-8 max-w-3xl">
+          <p className="focus-kicker mb-5">Settings</p>
+          <h1 className="font-display text-5xl leading-[0.94] tracking-[-0.03em] text-ink md:text-6xl">
+            Account details,
+            <span className="block text-clay">without dashboard clutter.</span>
+          </h1>
+          <p className="mt-4 max-w-2xl text-lg leading-8 text-ink-soft">
+            Billing and identity live here so the working session surface can stay narrow and calm.
+          </p>
+        </div>
+
+        <div className="grid max-w-4xl gap-6">
+          <Card className="focus-card border border-line rounded-[2rem]">
+            <CardHeader>
+              <CardTitle className="font-display text-3xl text-ink">Profile</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                {session.user.image && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={session.user.image} alt="" className="h-14 w-14 rounded-full object-cover" />
                 )}
-              </CardContent>
-            </Card>
-          </div>
+                <div>
+                  <p className="text-lg font-medium text-ink">{session.user.name || "FocusSteps user"}</p>
+                  <p className="text-sm text-ink-soft">{session.user.email}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="focus-panel border border-line rounded-[2rem]">
+            <CardHeader>
+              <CardTitle className="font-display text-3xl text-ink">Subscription</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <Badge className={isPro ? "border-0 bg-teal px-3 py-1 text-white" : "border-0 bg-[#f0e4d0] px-3 py-1 text-ink"}>
+                  {isPro ? "Pro" : "Free plan"}
+                </Badge>
+                {isPro && subscription?.currentPeriodEnd && (
+                  <span className="text-sm text-ink-soft">
+                    Renews {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+
+              {isPro ? (
+                <div className="space-y-3">
+                  <p className="text-sm leading-6 text-ink-soft">
+                    Unlimited AI breakdowns and account-level features are active.
+                  </p>
+                  <form action={createPortalSession}>
+                    <Button type="submit" variant="outline" className="rounded-full border-line bg-white/80 text-ink">
+                      Manage billing
+                    </Button>
+                  </form>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm leading-6 text-ink-soft">
+                    Upgrade when you want unlimited AI breakdowns, reminders, and full billing controls.
+                  </p>
+                  <Link href="/pricing">
+                    <Button className="rounded-full bg-clay text-white hover:bg-[#b45630]">Upgrade to Pro</Button>
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </main>
     </div>

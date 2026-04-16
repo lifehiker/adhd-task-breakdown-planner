@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { generateTaskBreakdown } from "@/lib/ai";
 import { getMonthlyUsageCount, isUserPro, FREE_TIER_LIMIT } from "@/lib/subscription";
+import { canAccessTaskSession } from "@/lib/task-access";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const taskSession = await prisma.taskSession.findUnique({ where: { id } });
     if (!taskSession) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    if (!canAccessTaskSession({ taskSession, userId, localSessionKey })) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
 
     if (!userId || !(await isUserPro(userId))) {
       const usageCount = await getMonthlyUsageCount(userId, localSessionKey);
