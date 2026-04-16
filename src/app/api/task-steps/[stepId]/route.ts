@@ -38,7 +38,29 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ stepI
 
     const body = await req.json();
     const data = UpdateStepSchema.parse(body);
+    const countedStatuses = new Set(["DONE", "SKIPPED"]);
+    const previousContribution =
+      countedStatuses.has(existing.status) && typeof existing.actualMinutes === "number" ? existing.actualMinutes : 0;
+
+    const nextStatus = data.status ?? existing.status;
+    const nextActualMinutes = data.actualMinutes ?? existing.actualMinutes;
+    const nextContribution =
+      countedStatuses.has(nextStatus) && typeof nextActualMinutes === "number" ? nextActualMinutes : 0;
+    const contributionDelta = nextContribution - previousContribution;
+
     const step = await prisma.taskStep.update({ where: { id: stepId }, data });
+
+    if (contributionDelta !== 0) {
+      await prisma.taskSession.update({
+        where: { id: existing.taskSessionId },
+        data: {
+          totalMinutesSpent: {
+            increment: contributionDelta,
+          },
+        },
+      });
+    }
+
     return NextResponse.json(step);
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: error.errors }, { status: 400 });

@@ -80,13 +80,24 @@ export function NewTaskExperience() {
       }
     }
 
-    loadUsage();
+    void loadUsage();
     loadRecentSessions();
 
     return () => {
       cancelled = true;
     };
   }, []);
+
+  async function refreshUsage() {
+    try {
+      const res = await fetch("/api/usage/check?localSessionKey=" + encodeURIComponent(getLocalSessionKey()));
+      if (!res.ok) return;
+      const data = await res.json();
+      setUsageRemaining(data.remaining ?? null);
+    } catch {
+      // ignore usage fetch issues
+    }
+  }
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -140,6 +151,12 @@ export function NewTaskExperience() {
               onSuccess={(sessionId) => {
                 setActiveSessionId(sessionId);
               }}
+              onUsageLimit={() => {
+                setShowUpgrade(true);
+              }}
+              onBreakdownGenerated={() => {
+                void refreshUsage();
+              }}
             />
           </div>
         </section>
@@ -154,7 +171,16 @@ export function NewTaskExperience() {
                 </div>
                 <Badge className="rounded-full border-0 bg-teal px-3 py-1 text-white">{activeSession.steps.length} steps</Badge>
               </div>
-              <BreakdownPreview sessionId={activeSession.id} initialSteps={activeSession.steps} />
+              <BreakdownPreview
+                sessionId={activeSession.id}
+                initialSteps={activeSession.steps}
+                onUsageLimit={() => {
+                  setShowUpgrade(true);
+                }}
+                onBreakdownGenerated={() => {
+                  void refreshUsage();
+                }}
+              />
             </div>
           ) : (
             <div className="focus-panel overflow-hidden rounded-[2rem] p-6 md:p-7">

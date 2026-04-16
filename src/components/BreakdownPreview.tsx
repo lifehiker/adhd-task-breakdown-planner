@@ -13,9 +13,16 @@ type Step = { id: string; title: string; estimatedMinutes: number; order: number
 interface BreakdownPreviewProps {
   sessionId: string;
   initialSteps: Step[];
+  onUsageLimit?: () => void;
+  onBreakdownGenerated?: () => void;
 }
 
-export function BreakdownPreview({ sessionId, initialSteps }: BreakdownPreviewProps) {
+export function BreakdownPreview({
+  sessionId,
+  initialSteps,
+  onUsageLimit,
+  onBreakdownGenerated,
+}: BreakdownPreviewProps) {
   const router = useRouter();
   const [steps, setSteps] = useState(initialSteps);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -85,11 +92,18 @@ export function BreakdownPreview({ sessionId, initialSteps }: BreakdownPreviewPr
 
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error === "USAGE_LIMIT_REACHED" ? "Free limit reached. Upgrade to Pro for more AI breakdowns." : "Could not regenerate breakdown");
+        if (data.error === "USAGE_LIMIT_REACHED") {
+          onUsageLimit?.();
+          toast.error("Free limit reached. Upgrade to Pro for more AI breakdowns.");
+          return;
+        }
+
+        toast.error("Could not regenerate breakdown");
         return;
       }
 
       setSteps(data.steps ?? []);
+      onBreakdownGenerated?.();
       toast.success("Fresh breakdown ready");
     } catch {
       toast.error("Failed to regenerate breakdown");

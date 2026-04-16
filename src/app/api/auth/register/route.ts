@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { isPrismaAvailable, prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
@@ -11,6 +11,13 @@ const RegisterSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isPrismaAvailable) {
+      return NextResponse.json(
+        { error: "Database is not configured yet. Set DATABASE_URL before creating accounts." },
+        { status: 503 }
+      );
+    }
+
     const body = await req.json();
     const data = RegisterSchema.parse(body);
 

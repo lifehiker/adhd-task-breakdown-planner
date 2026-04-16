@@ -13,7 +13,7 @@ const slides = [
   {
     icon: Zap,
     title: "Break tasks into tiny steps",
-    desc: "Paste your task and AI breaks it into 5-8 small, concrete, timed steps. Nothing vague.",
+    desc: "Paste your task and AI breaks it into 3-8 small, concrete, timed steps. Nothing vague.",
   },
   {
     icon: CheckSquare,
@@ -48,21 +48,27 @@ export function OnboardingSlides({ onComplete }: OnboardingSlidesProps) {
   const Icon = slide.icon;
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
-        <div className="w-16 h-16 rounded-2xl bg-purple-100 flex items-center justify-center mx-auto mb-6">
-          <Icon className="w-8 h-8 text-[#7c3aed]" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <div className="focus-panel w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-[#f0e4d0] text-clay">
+          <Icon className="h-8 w-8" />
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-3">{slide.title}</h2>
-        <p className="text-gray-600 mb-8">{slide.desc}</p>
-        <div className="flex items-center gap-1 justify-center mb-6">
+        <p className="focus-kicker mx-auto mb-5">Quick onboarding</p>
+        <h2 className="font-display text-4xl leading-none text-ink">{slide.title}</h2>
+        <p className="mt-4 text-base leading-7 text-ink-soft">{slide.desc}</p>
+        <div className="mb-7 mt-7 flex items-center justify-center gap-2">
           {slides.map((_, i) => (
-            <div key={i} className={"w-2 h-2 rounded-full " + (i === currentSlide ? "bg-[#7c3aed]" : "bg-gray-200")} />
+            <div
+              key={i}
+              className={"h-2.5 rounded-full transition-all " + (i === currentSlide ? "w-8 bg-teal" : "w-2.5 bg-[#d7ccbb]")}
+            />
           ))}
         </div>
         <div className="flex gap-3">
-          <Button variant="ghost" onClick={handleSkip} className="flex-1 text-gray-500">Skip</Button>
-          <Button onClick={handleNext} className="flex-1 bg-[#7c3aed] hover:bg-[#6d28d9]">
+          <Button variant="ghost" onClick={handleSkip} className="flex-1 rounded-full text-ink-soft">
+            Skip
+          </Button>
+          <Button onClick={handleNext} className="flex-1 rounded-full bg-teal text-white hover:bg-[#175553]">
             {currentSlide === slides.length - 1 ? "Get Started" : "Next"}
           </Button>
         </div>

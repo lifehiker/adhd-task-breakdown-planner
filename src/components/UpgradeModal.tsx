@@ -32,37 +32,39 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md border-line bg-[rgba(248,242,233,0.98)] p-0">
         <DialogHeader>
-          <div className="w-12 h-12 rounded-xl bg-[#7c3aed] flex items-center justify-center mx-auto mb-2">
-            <Zap className="w-7 h-7 text-white" />
+          <div className="rounded-[1.75rem] border border-line bg-[#16313a] px-6 py-7 text-center text-white">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-[#f0e4d0] text-[#16313a]">
+              <Zap className="h-7 w-7" />
+            </div>
+            <DialogTitle className="font-display text-4xl leading-none text-white">Upgrade to Pro</DialogTitle>
+            <DialogDescription className="mx-auto mt-3 max-w-sm text-sm leading-6 text-white/72">
+              You&apos;ve used your 5 free AI breakdowns this month. Upgrade when you want unlimited help and continuation support.
+            </DialogDescription>
           </div>
-          <DialogTitle className="text-center">Upgrade to Pro</DialogTitle>
-          <DialogDescription className="text-center">
-            You&apos;ve used your 5 free AI breakdowns this month. Upgrade for unlimited access.
-          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2 my-4">
+        <div className="space-y-3 px-6 py-1">
           {[
             "Unlimited AI task breakdowns",
             "Make step easier (AI sub-steps)",
             "Email reminders to continue",
           ].map((f) => (
-            <div key={f} className="flex items-center gap-2 text-sm text-gray-700">
-              <CheckCircle className="w-4 h-4 text-[#7c3aed] flex-shrink-0" />
+            <div key={f} className="flex items-center gap-3 rounded-[1.2rem] border border-line bg-white/75 px-4 py-3 text-sm text-ink">
+              <CheckCircle className="h-4 w-4 flex-shrink-0 text-teal" />
               {f}
             </div>
           ))}
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2 px-6 pb-6 pt-3">
           <Button
             onClick={handleUpgrade}
             disabled={loading}
-            className="w-full bg-[#7c3aed] hover:bg-[#6d28d9]"
+            className="h-12 w-full rounded-full bg-clay text-white hover:bg-[#b45630]"
           >
             {loading ? "Loading..." : "Get Pro — $7.99/month"}
           </Button>
-          <Button variant="ghost" onClick={onClose} className="w-full text-gray-500">
+          <Button variant="ghost" onClick={onClose} className="w-full rounded-full text-ink-soft">
             Maybe later
           </Button>
         </div>

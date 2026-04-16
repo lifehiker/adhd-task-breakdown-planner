@@ -12,9 +12,11 @@ const DURATIONS = [15, 25, 45, 60];
 
 interface TaskInputFormProps {
   onSuccess?: (sessionId: string) => void;
+  onUsageLimit?: (sessionId: string) => void;
+  onBreakdownGenerated?: () => void;
 }
 
-export function TaskInputForm({ onSuccess }: TaskInputFormProps) {
+export function TaskInputForm({ onSuccess, onUsageLimit, onBreakdownGenerated }: TaskInputFormProps) {
   const router = useRouter();
   const { localSession } = useSessionStore();
   const [title, setTitle] = useState("");
@@ -45,13 +47,14 @@ export function TaskInputForm({ onSuccess }: TaskInputFormProps) {
         const err = await breakdownRes.json();
         if (err.error === "USAGE_LIMIT_REACHED") {
           toast.error("Free limit reached. Upgrade to Pro for unlimited breakdowns.");
+          onUsageLimit?.(session.id);
           if (onSuccess) onSuccess(session.id);
-          else router.push("/app/session/" + session.id);
           return;
         }
         throw new Error(err.error || "Failed to generate breakdown");
       }
 
+      onBreakdownGenerated?.();
       toast.success("Task broken down!");
       if (onSuccess) onSuccess(session.id);
       else router.push("/app/session/" + session.id);

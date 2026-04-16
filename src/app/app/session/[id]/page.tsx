@@ -1,18 +1,33 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
+
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { CheckCircle, SkipForward, Loader2, Clock, Trophy, ArrowLeft, Plus, Sparkles, Play } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Loader2,
+  PauseCircle,
+  Play,
+  SkipForward,
+  Sparkles,
+  TimerReset,
+  Trophy,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { getLocalSessionHeaders, rememberLocalSessionId } from "@/lib/local-session-client";
 
 type Step = {
   id: string;
   title: string;
   estimatedMinutes: number;
+  actualMinutes?: number | null;
   status: string;
   order: number;
 };
@@ -27,14 +42,21 @@ type Session = {
   steps: Step[];
 };
 
-function timerKey(sessionId: string, stepId: string) {
+function timerStorageKey(sessionId: string, stepId: string) {
   return `focussteps-timer-${sessionId}-${stepId}`;
+}
+
+function formatTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }
 
 export default function SessionPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -44,44 +66,59 @@ export default function SessionPage() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerExpired, setTimerExpired] = useState(false);
   const [showContinuation, setShowContinuation] = useState(false);
-  const [completedStepTitle, setCompletedStepTitle] = useState('');
+  const [completedStepTitle, setCompletedStepTitle] = useState("");
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const continuationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchSession = useCallback(async () => {
+  async function fetchSession() {
     try {
-      const res = await fetch("/api/task-sessions/" + id, { headers: getLocalSessionHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setSession(data);
-        rememberLocalSessionId(data.id);
+      const res = await fetch(`/api/task-sessions/${id}`, {
+        headers: getLocalSessionHeaders(),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to load session");
       }
-    } catch (err) {
-      console.error(err);
+
+      const data = (await res.json()) as Session;
+      setSession(data);
+      rememberLocalSessionId(data.id);
+    } catch (error) {
+      console.error(error);
+      toast.error("Could not load this session.");
     } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    fetchSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  useEffect(() => { fetchSession(); }, [fetchSession]);
-
-  // Clean up continuation timer on unmount
   useEffect(() => {
     return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
       if (continuationTimerRef.current) clearTimeout(continuationTimerRef.current);
     };
   }, []);
 
-  const currentStepId = session?.steps.find(
-    (s) => s.status !== "DONE" && s.status !== "SKIPPED"
-  )?.id;
+  const actionableSteps = session?.steps.filter((step) => step.status !== "DONE" && step.status !== "SKIPPED") ?? [];
+  const doneSteps = session?.steps.filter((step) => step.status === "DONE" || step.status === "SKIPPED") ?? [];
+  const completedSteps = session?.steps.filter((step) => step.status === "DONE") ?? [];
+  const skippedSteps = session?.steps.filter((step) => step.status === "SKIPPED") ?? [];
+  const currentStep = actionableSteps[0] ?? null;
+  const progress = session?.steps.length ? Math.round((doneSteps.length / session.steps.length) * 100) : 0;
+  const allDone = Boolean(session?.steps.length) && actionableSteps.length === 0;
+  const showResumeNudge = Boolean(currentStep && doneSteps.length > 0 && !timerStarted && !timerExpired);
 
   useEffect(() => {
-    if (!currentStepId || !id) return;
-    const saved = localStorage.getItem(timerKey(id, currentStepId));
-    const currentStep = session?.steps.find((s) => s.id === currentStepId);
-    if (saved) {
-      const remaining = parseInt(saved, 10);
+    if (!id || !currentStep) return;
+
+    const stored = localStorage.getItem(timerStorageKey(id, currentStep.id));
+    if (stored) {
+      const remaining = Number.parseInt(stored, 10);
       if (remaining > 0) {
         setTimer(remaining);
         setTimerStarted(true);
@@ -90,61 +127,39 @@ export default function SessionPage() {
         return;
       }
     }
-    setTimer((currentStep?.estimatedMinutes ?? 5) * 60);
+
+    setTimer(currentStep.estimatedMinutes * 60);
     setTimerStarted(false);
     setTimerRunning(false);
     setTimerExpired(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStepId, id]);
+  }, [currentStep, id]);
 
   useEffect(() => {
-    if (timerRunning) {
-      intervalRef.current = setInterval(() => {
-        setTimer((t) => {
-          if (t <= 1) {
-            clearInterval(intervalRef.current!);
-            setTimerRunning(false);
-            setTimerExpired(true);
-            if (currentStepId && id) localStorage.removeItem(timerKey(id, currentStepId));
-            return 0;
-          }
-          const next = t - 1;
-          if (currentStepId && id) localStorage.setItem(timerKey(id, currentStepId), String(next));
-          return next;
-        });
-      }, 1000);
-    } else {
+    if (!timerRunning || !currentStep) {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [timerRunning, currentStepId, id]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 className="w-8 h-8 animate-spin text-[#7c3aed]" />
-    </div>
-  );
+    intervalRef.current = setInterval(() => {
+      setTimer((currentValue) => {
+        if (currentValue <= 1) {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          setTimerRunning(false);
+          setTimerExpired(true);
+          localStorage.removeItem(timerStorageKey(id, currentStep.id));
+          return 0;
+        }
 
-  if (!session) return (
-    <div className="text-center py-20">
-      <p className="text-gray-500">Session not found</p>
-      <Button onClick={() => router.push("/app")} className="mt-4">Back to dashboard</Button>
-    </div>
-  );
+        const nextValue = currentValue - 1;
+        localStorage.setItem(timerStorageKey(id, currentStep.id), String(nextValue));
+        return nextValue;
+      });
+    }, 1000);
 
-  const activeSteps = session.steps.filter((s) => s.status !== "DONE" && s.status !== "SKIPPED");
-  const doneSteps = session.steps.filter((s) => s.status === "DONE" || s.status === "SKIPPED");
-  const completedDoneSteps = session.steps.filter((s) => s.status === "DONE");
-  const skippedSteps = session.steps.filter((s) => s.status === "SKIPPED");
-  const currentStep = activeSteps[0];
-  const progress = session.steps.length > 0 ? Math.round((doneSteps.length / session.steps.length) * 100) : 0;
-  const allDone = activeSteps.length === 0 && session.steps.length > 0;
-
-  function formatTime(s: number) {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return m.toString().padStart(2, "0") + ":" + sec.toString().padStart(2, "0");
-  }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [currentStep, id, timerRunning]);
 
   function startTimer() {
     setTimerStarted(true);
@@ -152,38 +167,59 @@ export default function SessionPage() {
     setTimerExpired(false);
   }
 
+  function pauseTimer() {
+    setTimerRunning(false);
+    toast("Timer paused. You can resume when you are ready.");
+  }
+
   function addMoreTime() {
-    setTimer((t) => t + 300);
+    setTimer((value) => value + 300);
     setTimerExpired(false);
     setTimerRunning(true);
   }
 
-  function advanceFromContinuation() {
-    if (continuationTimerRef.current) clearTimeout(continuationTimerRef.current);
-    setShowContinuation(false);
-    fetchSession();
+  async function setSessionStatus(status: "ACTIVE" | "ABANDONED" | "COMPLETED") {
+    const res = await fetch(`/api/task-sessions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
+      body: JSON.stringify({ status }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Could not update session status");
+    }
+
+    return (await res.json()) as Session;
   }
 
   async function markStepDone(stepId: string, status: "DONE" | "SKIPPED") {
+    if (!currentStep) return;
+
     setUpdating(true);
-    const elapsed = (currentStep?.estimatedMinutes ?? 5) * 60 - timer;
-    const actualMinutes = Math.max(1, Math.round(elapsed / 60));
+    const elapsedSeconds = currentStep.estimatedMinutes * 60 - timer;
+    const actualMinutes = Math.max(1, Math.round(elapsedSeconds / 60));
     const isDone = status === "DONE";
-    const stepTitle = currentStep?.title ?? "";
-    const hasMoreSteps = activeSteps.length > 1;
+    const hasMoreSteps = actionableSteps.length > 1;
+
     try {
-      if (id) localStorage.removeItem(timerKey(id, stepId));
-      await fetch("/api/task-steps/" + stepId, {
+      localStorage.removeItem(timerStorageKey(id, stepId));
+
+      const res = await fetch(`/api/task-steps/${stepId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
         body: JSON.stringify({ status, actualMinutes }),
       });
+
+      if (!res.ok) {
+        throw new Error("Could not update step");
+      }
+
       setTimerStarted(false);
       setTimerRunning(false);
       setTimerExpired(false);
 
       if (isDone && hasMoreSteps) {
-        setCompletedStepTitle(stepTitle);
+        setCompletedStepTitle(currentStep.title);
         setShowContinuation(true);
         continuationTimerRef.current = setTimeout(() => {
           setShowContinuation(false);
@@ -191,284 +227,519 @@ export default function SessionPage() {
         }, 1500);
       } else {
         await fetchSession();
-        if (isDone) toast.success("Great work! Step complete!");
-        else toast("Step skipped — moving on.");
+        toast(isDone ? "Step complete." : "Step skipped.");
       }
-    } catch {
-      toast.error("Failed to update step");
+    } catch (error) {
+      console.error(error);
+      toast.error("Could not update this step.");
     } finally {
       setUpdating(false);
     }
   }
 
-  async function makeStepEasier(stepId: string) {
+  async function makeCurrentStepEasier() {
+    if (!currentStep) return;
+
     setMakingEasier(true);
     try {
-      const res = await fetch("/api/task-steps/" + stepId + "/make-easier", {
+      const res = await fetch(`/api/task-steps/${currentStep.id}/make-easier`, {
         method: "POST",
         headers: getLocalSessionHeaders(),
       });
-      if (res.status === 403) { toast.error("Upgrade to Pro to use Make Easier"); return; }
-      if (!res.ok) { toast.error("Failed to simplify step"); return; }
-      if (id) localStorage.removeItem(timerKey(id, stepId));
-      await fetchSession();
+
+      if (res.status === 403) {
+        toast.error("Make Easier is part of Pro.");
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error("Failed to simplify step");
+      }
+
+      localStorage.removeItem(timerStorageKey(id, currentStep.id));
       setTimerStarted(false);
       setTimerRunning(false);
       setTimerExpired(false);
-      toast.success("Step broken into smaller pieces!");
-    } catch {
-      toast.error("Something went wrong");
+      await fetchSession();
+      toast.success("Current step broken into smaller pieces.");
+    } catch (error) {
+      console.error(error);
+      toast.error("Could not simplify this step.");
     } finally {
       setMakingEasier(false);
     }
   }
 
-  async function completeSession() {
-    await fetch("/api/task-sessions/" + id, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
-      body: JSON.stringify({ status: "COMPLETED" }),
-    });
-    toast.success("Session completed! Amazing work!");
-    await fetchSession();
-  }
-
   async function setStepDuration(stepId: string, minutes: number) {
     try {
-      const res = await fetch("/api/task-steps/" + stepId, {
+      const res = await fetch(`/api/task-steps/${stepId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...getLocalSessionHeaders() },
         body: JSON.stringify({ estimatedMinutes: minutes }),
       });
-      if (!res.ok) throw new Error("Failed to update step length");
-      await fetchSession();
+
+      if (!res.ok) {
+        throw new Error("Failed to update step length");
+      }
+
       setTimer(minutes * 60);
       setTimerStarted(false);
       setTimerRunning(false);
       setTimerExpired(false);
-    } catch {
-      toast.error("Could not update step duration");
+      localStorage.removeItem(timerStorageKey(id, stepId));
+      await fetchSession();
+    } catch (error) {
+      console.error(error);
+      toast.error("Could not update step length.");
     }
   }
 
-  if (allDone || session.status === "COMPLETED") {
+  async function completeSession() {
+    try {
+      await setSessionStatus("COMPLETED");
+      toast.success("Session completed.");
+      await fetchSession();
+    } catch (error) {
+      console.error(error);
+      toast.error("Could not complete this session.");
+    }
+  }
+
+  async function abandonSession() {
+    try {
+      await setSessionStatus("ABANDONED");
+      toast("Session moved to abandoned.");
+      router.push("/app");
+    } catch (error) {
+      console.error(error);
+      toast.error("Could not update this session.");
+    }
+  }
+
+  if (loading) {
     return (
-      <div className="max-w-lg mx-auto text-center py-12 animate-fade-in">
-        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
-          <Trophy className="w-10 h-10 text-green-600" />
-        </div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Task Complete!</h1>
-        <p className="text-gray-700 font-medium mb-4">{session.title}</p>
-
-        <div className="flex items-center justify-center gap-3 text-sm text-gray-500 mb-2 flex-wrap">
-          <span className="flex items-center gap-1">
-            <CheckCircle className="w-4 h-4 text-green-500" />
-            <strong className="text-gray-700">{completedDoneSteps.length}</strong>&nbsp;done
-          </span>
-          {skippedSteps.length > 0 && (
-            <>
-              <span className="text-gray-300">&middot;</span>
-              <span className="flex items-center gap-1">
-                <SkipForward className="w-4 h-4 text-gray-400" />
-                <strong className="text-gray-700">{skippedSteps.length}</strong>&nbsp;skipped
-              </span>
-            </>
-          )}
-          <span className="text-gray-300">&middot;</span>
-          <span>
-            <strong className="text-gray-700">{session.steps.length}</strong>&nbsp;total
-          </span>
-        </div>
-
-        {session.totalMinutesSpent != null && session.totalMinutesSpent > 0 && (
-          <p className="text-sm text-purple-600 flex items-center justify-center gap-1 mb-6">
-            <Clock className="w-4 h-4" />
-            ~{session.totalMinutesSpent} minutes focused
-          </p>
-        )}
-        {(!session.totalMinutesSpent || session.totalMinutesSpent === 0) && <div className="mb-6" />}
-
-        {allDone && session.status !== "COMPLETED" && (
-          <Button onClick={completeSession} className="bg-green-600 hover:bg-green-700 mb-4 w-full max-w-xs">
-            Mark as Complete
-          </Button>
-        )}
-        <div className="flex gap-4 justify-center">
-          <Button onClick={() => router.push("/app/new")} className="bg-[#7c3aed] hover:bg-[#6d28d9]">Start Another Task</Button>
-          <Button variant="outline" onClick={() => router.push("/app")}>Dashboard</Button>
-        </div>
-        {!session.userId && (
-          <div className="mt-6 rounded-2xl border border-line bg-white/70 p-5 text-left">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-ink-soft">Save this progress across devices</p>
-            <p className="mt-2 text-sm leading-6 text-ink-soft">
-              You finished this session in local mode. Create an account when you want sync, billing, and reminder emails.
-            </p>
-            <Button onClick={() => router.push("/login")} className="mt-4 rounded-full bg-clay text-white hover:bg-[#b45630]">
-              Create account
-            </Button>
-          </div>
-        )}
+      <div className="flex items-center justify-center py-28">
+        <Loader2 className="h-8 w-8 animate-spin text-teal" />
       </div>
     );
   }
 
-  return (
-    <div className="max-w-lg mx-auto">
-      {showContinuation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl px-8 py-10 max-w-sm w-full mx-4 text-center animate-fade-in-up">
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl text-green-600">&#10003;</span>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Great work!</h2>
-            <p className="text-sm text-gray-400 line-through mb-6 leading-relaxed">{completedStepTitle}</p>
-            <p className="text-gray-600 mb-6 font-medium">Ready for the next tiny step?</p>
-            <Button
-              onClick={advanceFromContinuation}
-              className="w-full bg-[#7c3aed] hover:bg-[#6d28d9] h-12 text-base"
-            >
-              Next Step &#8594;
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 mb-6">
-        <Button variant="ghost" size="sm" onClick={() => router.push("/app")} className="text-gray-500">
-          <ArrowLeft className="w-4 h-4 mr-1" /> Dashboard
+  if (!session) {
+    return (
+      <div className="mx-auto max-w-xl rounded-[2rem] border border-line bg-white/70 p-8 text-center">
+        <p className="text-lg text-ink">Session not found.</p>
+        <Button onClick={() => router.push("/app")} className="mt-5 rounded-full bg-teal text-white hover:bg-[#175553]">
+          Back to dashboard
         </Button>
       </div>
-      <div className="mb-6">
-        <h1 className="text-lg font-semibold text-gray-900 mb-1">{session.title}</h1>
-        <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
-          <span>Step {doneSteps.length + 1} of {session.steps.length}</span>
-          <span>{progress}% done</span>
-        </div>
-        <Progress value={progress} className="h-2" />
-      </div>
+    );
+  }
 
-      {currentStep && (
-        <Card className={"mb-6 border-2 shadow-md " + (timerExpired ? "border-red-300" : "border-[#7c3aed]/20")}>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Badge className="bg-purple-100 text-purple-700 border-0">Current Step</Badge>
-              <span className="text-xs text-gray-400 flex items-center gap-1">
-                <Clock className="w-3 h-3" /> ~{currentStep.estimatedMinutes} min
-              </span>
+  if (allDone || session.status === "COMPLETED") {
+    return (
+      <div className="mx-auto max-w-3xl animate-fade-in-up">
+        <Card className="focus-panel overflow-hidden rounded-[2.2rem] border border-line">
+          <CardContent className="p-7 md:p-10">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#e7f5eb] text-[#1f7a4c] shadow-glow">
+              <Trophy className="h-10 w-10" />
             </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">{currentStep.title}</h2>
+            <div className="mt-6 text-center">
+              <p className="focus-kicker mx-auto">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Session complete
+              </p>
+              <h1 className="mt-5 font-display text-5xl leading-none text-ink md:text-6xl">Task complete.</h1>
+              <p className="mt-4 text-lg leading-8 text-ink-soft">{session.title}</p>
+            </div>
 
-            {!timerStarted && (
-              <div className="mb-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Step length</p>
-                <div className="flex gap-2">
-                  {[5, 10, 15].map((minutes) => (
-                    <Button
-                      key={minutes}
-                      type="button"
-                      variant={currentStep.estimatedMinutes === minutes ? "default" : "outline"}
-                      className={currentStep.estimatedMinutes === minutes ? "bg-[#7c3aed] hover:bg-[#6d28d9]" : ""}
-                      onClick={() => setStepDuration(currentStep.id, minutes)}
-                    >
-                      {minutes} min
-                    </Button>
-                  ))}
-                </div>
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              <div className="focus-card rounded-[1.6rem] p-5 text-center">
+                <p className="text-xs uppercase tracking-[0.18em] text-ink-soft">Done</p>
+                <p className="mt-2 font-display text-5xl leading-none text-ink">{completedSteps.length}</p>
               </div>
-            )}
+              <div className="focus-card rounded-[1.6rem] p-5 text-center">
+                <p className="text-xs uppercase tracking-[0.18em] text-ink-soft">Skipped</p>
+                <p className="mt-2 font-display text-5xl leading-none text-ink">{skippedSteps.length}</p>
+              </div>
+              <div className="focus-card rounded-[1.6rem] p-5 text-center">
+                <p className="text-xs uppercase tracking-[0.18em] text-ink-soft">Minutes spent</p>
+                <p className="mt-2 font-display text-5xl leading-none text-ink">{session.totalMinutesSpent ?? 0}</p>
+              </div>
+            </div>
 
-            {!timerStarted ? (
-              <Button onClick={startTimer} className="w-full bg-[#7c3aed] hover:bg-[#6d28d9] h-12 text-base mb-4">
-                <Play className="mr-2 w-5 h-5" /> Start Step
+            {allDone && session.status !== "COMPLETED" ? (
+              <Button
+                onClick={completeSession}
+                className="mt-8 h-14 w-full rounded-full bg-teal text-base text-white hover:bg-[#175553]"
+              >
+                Mark session complete
               </Button>
-            ) : (
-              <div className="flex justify-center mb-4">
-                <div className="relative w-36 h-36">
-                  <svg className="w-36 h-36 -rotate-90" viewBox="0 0 144 144">
-                    <circle cx="72" cy="72" r="60" fill="none" stroke="#f3f0ff" strokeWidth="10" />
-                    <circle
-                      cx="72" cy="72" r="60"
-                      fill="none"
-                      stroke={timerExpired ? "#ef4444" : timer <= 60 ? "#f97316" : "#7c3aed"}
-                      strokeWidth="10"
-                      strokeLinecap="round"
-                      strokeDasharray={String(2 * Math.PI * 60)}
-                      strokeDashoffset={timerExpired ? 0 : String(2 * Math.PI * 60 * (1 - timer / ((currentStep?.estimatedMinutes ?? 5) * 60)))}
-                      style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s ease" }}
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    {timerExpired ? (
-                      <>
-                        <span className="text-red-500 text-xs font-semibold">Time&apos;s up!</span>
-                        <span className="text-2xl font-mono font-bold text-red-500">00:00</span>
-                      </>
-                    ) : (
-                      <span className={"text-2xl font-mono font-bold " + (timer <= 60 ? "text-orange-500 timer-urgent" : "text-[#7c3aed]")}>
-                        {formatTime(timer)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+            ) : null}
 
-            {timerExpired ? (
-              <div className="space-y-2">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <Button
+                onClick={() => router.push("/app/new")}
+                className="h-12 rounded-full bg-clay px-6 text-white hover:bg-[#b45630]"
+              >
+                Start another task
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/app")}
+                className="h-12 rounded-full border-line bg-white/80 px-6 text-ink"
+              >
+                Back to dashboard
+              </Button>
+            </div>
+
+            {!session.userId ? (
+              <div className="mt-8 rounded-[1.7rem] border border-line bg-white/75 p-5">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-ink-soft">Save progress across devices</p>
+                <p className="mt-2 text-sm leading-6 text-ink-soft">
+                  You completed this session in local mode. Create an account when you want sync, billing, and reminder emails.
+                </p>
                 <Button
-                  onClick={() => markStepDone(currentStep.id, "DONE")}
-                  disabled={updating}
-                  className="w-full bg-green-600 hover:bg-green-700 h-12 text-base"
+                  onClick={() => router.push("/login")}
+                  className="mt-4 rounded-full bg-clay text-white hover:bg-[#b45630]"
                 >
-                  {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle className="w-4 h-4 mr-2" /> Done!</>}
-                </Button>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button onClick={addMoreTime} variant="outline" className="h-10">
-                    <Plus className="w-4 h-4 mr-1" /> 5 More Min
-                  </Button>
-                  <Button onClick={() => markStepDone(currentStep.id, "SKIPPED")} disabled={updating} variant="outline" className="h-10">
-                    <SkipForward className="w-4 h-4 mr-1" /> Skip
-                  </Button>
-                </div>
-                <Button
-                  onClick={() => makeStepEasier(currentStep.id)}
-                  disabled={makingEasier}
-                  variant="outline"
-                  className="w-full text-purple-700 border-purple-200 hover:bg-purple-50"
-                >
-                  {makingEasier ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
-                  Make Easier (Pro)
-                </Button>
-              </div>
-            ) : timerStarted ? (
-              <div className="flex gap-2">
-                <Button onClick={() => markStepDone(currentStep.id, "DONE")} disabled={updating} className="flex-1 bg-green-600 hover:bg-green-700">
-                  {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle className="w-4 h-4 mr-1" /> Done</>}
-                </Button>
-                <Button onClick={() => markStepDone(currentStep.id, "SKIPPED")} disabled={updating} variant="outline">
-                  <SkipForward className="w-4 h-4" />
-                </Button>
-                <Button onClick={() => makeStepEasier(currentStep.id)} disabled={makingEasier} variant="outline" className="text-purple-700 border-purple-200">
-                  {makingEasier ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Create account
                 </Button>
               </div>
             ) : null}
           </CardContent>
         </Card>
-      )}
+      </div>
+    );
+  }
 
-      <div className="space-y-2">
-        {session.steps.map((step, i) => (
-          <div
-            key={step.id}
-            className={"flex items-center gap-3 p-3 rounded-lg text-sm " + (step.status === "DONE" ? "text-green-700 bg-green-50" : step.status === "SKIPPED" ? "text-gray-400 line-through bg-gray-50" : step.id === currentStep?.id ? "text-gray-900 bg-purple-50 font-medium" : "text-gray-400 bg-gray-50")}
-          >
-            <span className={"w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 " + (step.status === "DONE" ? "bg-green-200 text-green-700" : step.status === "SKIPPED" ? "bg-gray-200 text-gray-500" : step.id === currentStep?.id ? "bg-[#7c3aed] text-white" : "bg-gray-200 text-gray-500")}>
-              {step.status === "DONE" ? "✓" : (i + 1)}
-            </span>
-            {step.title}
+  return (
+    <div className="mx-auto max-w-6xl">
+      {showContinuation ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="focus-panel w-full max-w-md rounded-[2rem] p-7 text-center animate-fade-in-up">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#e7f5eb] text-[#1f7a4c]">
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+            <p className="mt-5 text-xs uppercase tracking-[0.24em] text-ink-soft">Step complete</p>
+            <h2 className="mt-2 font-display text-4xl leading-none text-ink">Ready for the next tiny step?</h2>
+            <p className="mt-3 text-sm leading-6 text-ink-soft line-through">{completedStepTitle}</p>
+            <Button
+              onClick={() => {
+                if (continuationTimerRef.current) clearTimeout(continuationTimerRef.current);
+                setShowContinuation(false);
+                fetchSession();
+              }}
+              className="mt-6 h-12 w-full rounded-full bg-teal text-white hover:bg-[#175553]"
+            >
+              Continue
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
           </div>
-        ))}
+        </div>
+      ) : null}
+
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/app")}
+          className="rounded-full px-0 text-ink hover:bg-transparent hover:text-teal"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to dashboard
+        </Button>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => router.push("/app")}
+            className="rounded-full border-line bg-white/80 text-ink"
+          >
+            <PauseCircle className="mr-2 h-4 w-4" />
+            Save for later
+          </Button>
+          <Button
+            variant="outline"
+            onClick={abandonSession}
+            className="rounded-full border-line bg-white/80 text-ink-soft"
+          >
+            <XCircle className="mr-2 h-4 w-4" />
+            Abandon
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <section className="space-y-6">
+          <div className="focus-panel rounded-[2.2rem] p-6 md:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-2xl">
+                <p className="focus-kicker mb-4">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Active session
+                </p>
+                <h1 className="font-display text-4xl leading-[0.92] text-ink md:text-6xl">{session.title}</h1>
+              </div>
+              <Badge className="rounded-full border-0 bg-[#16313a] px-4 py-1.5 text-[#f6f0e5]">
+                {doneSteps.length + 1} / {session.steps.length}
+              </Badge>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="focus-card rounded-[1.6rem] p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-ink-soft">Progress</p>
+                <p className="mt-2 font-display text-5xl leading-none text-ink">{progress}%</p>
+              </div>
+              <div className="focus-card rounded-[1.6rem] p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-ink-soft">Target length</p>
+                <p className="mt-2 font-display text-5xl leading-none text-ink">{session.targetMinutes}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.16em] text-ink-soft">minutes</p>
+              </div>
+              <div className="focus-card rounded-[1.6rem] p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-ink-soft">Focused time</p>
+                <p className="mt-2 font-display text-5xl leading-none text-ink">{session.totalMinutesSpent ?? 0}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.16em] text-ink-soft">minutes logged</p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between text-sm text-ink-soft">
+                <span>{doneSteps.length} steps behind you</span>
+                <span>{session.steps.length - doneSteps.length} left</span>
+              </div>
+              <Progress value={progress} className="h-2.5" />
+            </div>
+          </div>
+
+          {showResumeNudge ? (
+            <div className="rounded-[1.8rem] border border-line bg-white/75 px-5 py-4">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-ink-soft">Continue where you left off</p>
+              <p className="mt-2 text-sm leading-6 text-ink-soft">
+                Want to continue where you left off? Your next step is already queued up.
+              </p>
+            </div>
+          ) : null}
+
+          {currentStep ? (
+            <Card className={`overflow-hidden rounded-[2.2rem] border ${timerExpired ? "border-[#d97757]/40" : "border-line"} bg-[#16313a] text-white shadow-glow`}>
+              <CardContent className="p-6 md:p-7">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="max-w-2xl">
+                    <p className="text-xs uppercase tracking-[0.24em] text-white/55">Current step</p>
+                    <h2 className="mt-3 text-2xl leading-tight md:text-3xl">{currentStep.title}</h2>
+                  </div>
+                  <div className="rounded-full border border-white/12 bg-white/8 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/70">
+                    {currentStep.estimatedMinutes} min
+                  </div>
+                </div>
+
+                {!timerStarted ? (
+                  <div className="mt-6">
+                    <p className="text-xs uppercase tracking-[0.2em] text-white/48">Choose step length</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {[5, 10, 15].map((minutes) => (
+                        <Button
+                          key={minutes}
+                          type="button"
+                          variant="outline"
+                          onClick={() => setStepDuration(currentStep.id, minutes)}
+                          className={
+                            currentStep.estimatedMinutes === minutes
+                              ? "rounded-full border-[#f0e4d0] bg-[#f0e4d0] text-[#16313a] hover:bg-white"
+                              : "rounded-full border-white/15 bg-white/5 text-white hover:bg-white/10"
+                          }
+                        >
+                          {minutes} min
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-7 grid gap-6 md:grid-cols-[0.56fr_0.44fr] md:items-center">
+                  <div className="rounded-[1.8rem] border border-white/10 bg-white/6 p-5">
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.22em] text-white/50">
+                      <Clock3 className="h-4 w-4" />
+                      Timer
+                    </div>
+                    <p className={`mt-4 font-display text-7xl leading-none ${timerExpired ? "text-[#f0c2ad]" : timer <= 60 ? "timer-urgent text-[#f0c2ad]" : "text-[#f6f0e5]"}`}>
+                      {timerExpired ? "00:00" : formatTime(timer)}
+                    </p>
+                    <p className="mt-4 max-w-sm text-sm leading-6 text-white/62">
+                      {timerExpired
+                        ? "Time is up. Choose the cleanest next move: done, more time, skip, or make it easier."
+                        : timerStarted
+                          ? "Keep your attention on just this one action."
+                          : "Start the step when you are ready. The rest of the plan can stay quiet for a minute."}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {!timerStarted ? (
+                      <Button
+                        onClick={startTimer}
+                        className="h-14 w-full rounded-full bg-[#f0e4d0] text-base text-[#16313a] hover:bg-white"
+                      >
+                        <Play className="mr-2 h-5 w-5" />
+                        Start step
+                      </Button>
+                    ) : timerExpired ? (
+                      <>
+                        <Button
+                          onClick={() => markStepDone(currentStep.id, "DONE")}
+                          disabled={updating}
+                          className="h-12 w-full rounded-full bg-[#e7f5eb] text-[#174f35] hover:bg-white"
+                        >
+                          {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle2 className="mr-2 h-4 w-4" /> Done</>}
+                        </Button>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <Button
+                            onClick={addMoreTime}
+                            variant="outline"
+                            className="h-11 rounded-full border-white/15 bg-white/6 text-white hover:bg-white/10"
+                          >
+                            <TimerReset className="mr-2 h-4 w-4" />
+                            5 more min
+                          </Button>
+                          <Button
+                            onClick={() => markStepDone(currentStep.id, "SKIPPED")}
+                            disabled={updating}
+                            variant="outline"
+                            className="h-11 rounded-full border-white/15 bg-white/6 text-white hover:bg-white/10"
+                          >
+                            <SkipForward className="mr-2 h-4 w-4" />
+                            Skip
+                          </Button>
+                        </div>
+                        <Button
+                          onClick={makeCurrentStepEasier}
+                          disabled={makingEasier}
+                          variant="outline"
+                          className="h-11 w-full rounded-full border-[#f0c2ad]/35 bg-white/6 text-[#f0c2ad] hover:bg-white/10"
+                        >
+                          {makingEasier ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                          Make easier
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          onClick={() => markStepDone(currentStep.id, "DONE")}
+                          disabled={updating}
+                          className="h-12 w-full rounded-full bg-[#e7f5eb] text-[#174f35] hover:bg-white"
+                        >
+                          {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle2 className="mr-2 h-4 w-4" /> Done</>}
+                        </Button>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <Button
+                            onClick={pauseTimer}
+                            variant="outline"
+                            className="h-11 rounded-full border-white/15 bg-white/6 text-white hover:bg-white/10"
+                          >
+                            <PauseCircle className="mr-2 h-4 w-4" />
+                            Pause
+                          </Button>
+                          <Button
+                            onClick={() => markStepDone(currentStep.id, "SKIPPED")}
+                            disabled={updating}
+                            variant="outline"
+                            className="h-11 rounded-full border-white/15 bg-white/6 text-white hover:bg-white/10"
+                          >
+                            <SkipForward className="mr-2 h-4 w-4" />
+                            Skip
+                          </Button>
+                        </div>
+                        <Button
+                          onClick={makeCurrentStepEasier}
+                          disabled={makingEasier}
+                          variant="outline"
+                          className="h-11 w-full rounded-full border-[#f0c2ad]/35 bg-white/6 text-[#f0c2ad] hover:bg-white/10"
+                        >
+                          {makingEasier ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                          Make easier
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+        </section>
+
+        <aside className="space-y-6">
+          <Card className="focus-card rounded-[2rem] border border-line">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-ink-soft">Step queue</p>
+                  <h2 className="mt-1 font-display text-4xl leading-none text-ink">One thing at a time.</h2>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {session.steps.map((step, index) => {
+                  const isCurrent = step.id === currentStep?.id;
+                  const isDone = step.status === "DONE";
+                  const isSkipped = step.status === "SKIPPED";
+
+                  return (
+                    <div
+                      key={step.id}
+                      className={`rounded-[1.35rem] border px-4 py-4 transition-transform ${
+                        isCurrent
+                          ? "border-transparent bg-[#16313a] text-white shadow-glow"
+                          : isDone
+                            ? "border-[rgba(31,122,76,0.12)] bg-[#eef7f1] text-[#1d5c40]"
+                            : isSkipped
+                              ? "border-line bg-white/65 text-ink-soft"
+                              : "border-line bg-white/85 text-ink"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                            isCurrent
+                              ? "bg-white/12 text-white"
+                              : isDone
+                                ? "bg-[#cde6d7] text-[#1d5c40]"
+                                : isSkipped
+                                  ? "bg-[#ece4d8] text-ink-soft"
+                                  : "bg-[#f0e4d0] text-ink"
+                          }`}
+                        >
+                          {isDone ? "✓" : index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm leading-6 ${isSkipped ? "line-through" : ""}`}>{step.title}</p>
+                          <p className={`mt-1 text-xs uppercase tracking-[0.16em] ${isCurrent ? "text-white/55" : "text-ink-soft"}`}>
+                            {step.estimatedMinutes} min
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {!session.userId && completedSteps.length > 0 ? (
+            <Card className="focus-panel rounded-[2rem] border border-line">
+              <CardContent className="p-5">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-ink-soft">Want this saved beyond this device?</p>
+                <p className="mt-2 text-sm leading-6 text-ink-soft">
+                  Create an account after your first finished step to keep history, sync sessions, and unlock reminder emails later.
+                </p>
+                <Button
+                  onClick={() => router.push("/login")}
+                  className="mt-4 rounded-full bg-clay text-white hover:bg-[#b45630]"
+                >
+                  Create account
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+        </aside>
       </div>
     </div>
   );
