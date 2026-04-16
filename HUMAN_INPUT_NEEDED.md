@@ -2,6 +2,20 @@
 
 The app now builds cleanly, but a few account and billing flows cannot be fully exercised in this environment without configuration.
 
+## Required to unblock Coolify deployment
+
+- Coolify application resource
+  The deployment log `Coolify API POST /deploy: 404 {"message":"No resources found."}` is not caused by the Next.js app or Dockerfile. It means Coolify does not currently have a valid application/resource record to deploy for this repository.
+
+  In Coolify, verify all of the following before retrying:
+  1. The project/environment exists.
+  2. This repository is attached to an application resource.
+  3. The branch is configured on that resource.
+  4. The build pack is set to Docker / Dockerfile.
+  5. The resource was not deleted or disconnected from the Git provider.
+
+  After the resource exists again, redeploy the same commit. The repository-side build path is already passing locally.
+
 ## Required for account auth
 
 - `DATABASE_URL`
