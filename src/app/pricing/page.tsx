@@ -1,8 +1,9 @@
-import { CheckCircle, Zap } from "lucide-react";
+import { CheckCircle, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { BillingButton } from "@/components/BillingButton";
 
 export default function PricingPage() {
   const freeFeatures = [
@@ -16,8 +17,8 @@ export default function PricingPage() {
     "Unlimited AI task breakdowns",
     "Make step easier (AI sub-steps)",
     "Email reminders to continue sessions",
-    "Priority support",
-    "All future features",
+    "Unlimited saved history",
+    "Account billing controls",
   ];
 
   return (
@@ -49,6 +50,11 @@ export default function PricingPage() {
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-ink-soft">
             Start free in local mode. Upgrade only when you want unlimited AI help, reminders, and account-level sync.
           </p>
+        </div>
+
+        <div className="mx-auto mt-8 flex max-w-3xl items-center justify-center gap-2 rounded-full border border-line bg-white/75 px-4 py-2 text-sm text-ink-soft">
+          <Sparkles className="h-4 w-4 text-clay" />
+          Annual is the default recommendation: lower cost, less decision fatigue, same product.
         </div>
 
         <div className="mx-auto mt-12 grid max-w-5xl gap-6 lg:grid-cols-2">
@@ -86,8 +92,8 @@ export default function PricingPage() {
             <CardContent className="p-8 md:p-9">
               <div className="mb-8">
                 <p className="text-sm font-semibold uppercase tracking-[0.2em] text-ink-soft">Pro</p>
-                <h2 className="mt-3 font-display text-5xl leading-none text-ink">$7.99/mo</h2>
-                <p className="mt-2 text-sm uppercase tracking-[0.16em] text-ink-soft">or $39/year, save 59%</p>
+                <h2 className="mt-3 font-display text-5xl leading-none text-ink">$39/year</h2>
+                <p className="mt-2 text-sm uppercase tracking-[0.16em] text-ink-soft">Default plan. Or $7.99/month.</p>
                 <p className="mt-4 text-base leading-7 text-ink-soft">
                   Built for people who keep coming back and want the AI layer, reminders, and billing tied to an account.
                 </p>
@@ -102,11 +108,19 @@ export default function PricingPage() {
                 ))}
               </ul>
 
-              <Link href="/login?redirectTo=/pricing" className="mt-8 block">
-                <Button size="lg" className="h-14 w-full rounded-full bg-clay text-white hover:bg-[#b45630]">
-                  Get Pro
-                </Button>
-              </Link>
+              <div className="mt-8 space-y-3">
+                <BillingButton
+                  priceId={process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY}
+                  label="Start annual plan"
+                  className="h-14 w-full rounded-full bg-clay text-white hover:bg-[#b45630]"
+                />
+                <BillingButton
+                  priceId={process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY}
+                  label="Choose monthly instead"
+                  variant="outline"
+                  className="h-12 w-full rounded-full border-line bg-white/80 text-ink"
+                />
+              </div>
             </CardContent>
           </Card>
         </div>

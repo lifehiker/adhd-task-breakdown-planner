@@ -10,7 +10,8 @@ const config: Config = {
   theme: {
   	extend: {
       fontFamily: {
-        sans: ["var(--font-jakarta)", "system-ui", "sans-serif"],
+        sans: ["var(--font-body)", "Georgia", "serif"],
+        display: ["var(--font-display)", "Georgia", "serif"],
       },
   		borderRadius: {
   			lg: 'var(--radius)',

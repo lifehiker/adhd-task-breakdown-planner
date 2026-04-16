@@ -32,7 +32,7 @@ export async function sendContinueSessionEmail({
             <p style="color: #6b7280; margin: 0 0 24px; font-size: 16px;">
               Your task "<strong style="color: #111827;">${sessionTitle}</strong>" is still waiting. You've already done the hard part — starting. Pick one tiny step and keep going.
             </p>
-            <a href="${resumeUrl}" style="display: inline-block; background: #7c3aed; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+            <a href="${resumeUrl}" style="display: inline-block; background: #1e6a67; color: white; padding: 14px 28px; border-radius: 999px; text-decoration: none; font-weight: 600; font-size: 16px;">
               Continue My Task →
             </a>
             <p style="margin: 24px 0 0; color: #9ca3af; font-size: 14px;">

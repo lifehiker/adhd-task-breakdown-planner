@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, Zap } from "lucide-react";
+import { BillingButton } from "@/components/BillingButton";
 
 interface UpgradeModalProps {
   open: boolean;
@@ -57,12 +58,18 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
           ))}
         </div>
         <div className="space-y-2 px-6 pb-6 pt-3">
+          <BillingButton
+            priceId={process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY}
+            label="Get Pro — $39/year"
+            className="h-12 w-full rounded-full bg-clay text-white hover:bg-[#b45630]"
+          />
           <Button
             onClick={handleUpgrade}
             disabled={loading}
-            className="h-12 w-full rounded-full bg-clay text-white hover:bg-[#b45630]"
+            variant="outline"
+            className="h-12 w-full rounded-full border-line bg-white/80 text-ink"
           >
-            {loading ? "Loading..." : "Get Pro — $7.99/month"}
+            {loading ? "Loading..." : "Or choose $7.99/month"}
           </Button>
           <Button variant="ghost" onClick={onClose} className="w-full rounded-full text-ink-soft">
             Maybe later
