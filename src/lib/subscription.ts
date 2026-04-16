@@ -1,6 +1,7 @@
-import { prisma } from "./db";
+import { isPrismaAvailable, prisma } from "./db";
 
 export async function getUserSubscription(userId: string) {
+  if (!isPrismaAvailable) return null;
   return prisma.subscription.findUnique({
     where: { userId },
   });
@@ -18,6 +19,8 @@ export async function getMonthlyUsageCount(
   userId: string | null,
   localSessionKey: string | null
 ): Promise<number> {
+  if (!isPrismaAvailable) return 0;
+
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);

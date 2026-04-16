@@ -11,7 +11,51 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+
+  if (!session?.user?.id) {
+    return (
+      <div className="min-h-screen px-5 py-5 md:px-8">
+        <nav className="focus-panel sticky top-4 z-40 mx-auto flex max-w-6xl items-center justify-between rounded-[2rem] px-4 py-4 md:px-6">
+          <Link href="/app" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal text-white shadow-glow">
+              <Zap className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="font-display text-3xl leading-none text-ink">FocusSteps</p>
+              <p className="text-[10px] uppercase tracking-[0.28em] text-ink-soft">Account settings</p>
+            </div>
+          </Link>
+          <Link href="/login?redirectTo=/settings">
+            <Button className="rounded-full bg-clay px-5 text-white hover:bg-[#b45630]">Sign in</Button>
+          </Link>
+        </nav>
+
+        <main className="mx-auto max-w-6xl py-10">
+          <div className="max-w-3xl">
+            <p className="focus-kicker mb-5">Settings</p>
+            <h1 className="font-display text-5xl leading-[0.94] tracking-[-0.03em] text-ink md:text-6xl">
+              Settings live behind
+              <span className="block text-clay">your account.</span>
+            </h1>
+            <p className="mt-4 max-w-2xl text-lg leading-8 text-ink-soft">
+              Sign in to manage billing, identity, and subscription details. Local task sessions still work without an account.
+            </p>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Link href="/login?redirectTo=/settings">
+              <Button className="rounded-full bg-teal px-6 text-white hover:bg-[#175553]">Sign in to view settings</Button>
+            </Link>
+            <Link href="/app/new">
+              <Button variant="outline" className="rounded-full border-line bg-white/75 px-6 text-ink">
+                Start a local task
+              </Button>
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   const subscription = await prisma.subscription.findUnique({
     where: { userId: session.user.id },

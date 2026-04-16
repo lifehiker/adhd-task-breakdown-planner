@@ -8,9 +8,14 @@ import { z } from "zod";
 
 const googleConfigured =
   Boolean(process.env.AUTH_GOOGLE_ID) && Boolean(process.env.AUTH_GOOGLE_SECRET);
+const authSecret =
+  process.env.AUTH_SECRET ??
+  process.env.NEXTAUTH_SECRET ??
+  "focussteps-dev-auth-secret";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: isPrismaAvailable ? PrismaAdapter(prisma) : undefined,
+  secret: authSecret,
   providers: [
     ...(googleConfigured
       ? [
