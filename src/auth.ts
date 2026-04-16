@@ -16,6 +16,7 @@ const authSecret =
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: isPrismaAvailable ? PrismaAdapter(prisma) : undefined,
   secret: authSecret,
+  trustHost: true,
   providers: [
     ...(googleConfigured
       ? [

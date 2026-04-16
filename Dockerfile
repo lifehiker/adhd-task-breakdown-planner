@@ -11,6 +11,9 @@ FROM node:20-slim AS builder
 # Install OpenSSL for Prisma schema engine (debian-openssl-3.0.x target)
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
+ENV HOME="/tmp/focussteps-build"
+ENV XDG_CACHE_HOME="/tmp/focussteps-build/.cache"
+ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV DATABASE_URL="file:/tmp/build.db"
@@ -23,10 +26,11 @@ RUN npm run build
 
 # Stage 3: Runner
 FROM node:20-slim AS runner
-# Install sqlite for first-boot schema initialization
-RUN apt-get update -y && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+# Install sqlite for first-boot schema initialization and OpenSSL for Prisma runtime compatibility
+RUN apt-get update -y && apt-get install -y sqlite3 openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL="file:/data/app.db"
 ENV AUTH_SECRET="focussteps-default-secret-override-in-production"
 ENV NEXT_PUBLIC_APP_URL=""
@@ -37,6 +41,8 @@ RUN adduser --system --uid 1001 nextjs
 RUN mkdir -p /data /tmp/focussteps/.cache && chown -R nextjs:nodejs /data /tmp/focussteps
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
