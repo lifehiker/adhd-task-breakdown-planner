@@ -25,8 +25,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       isPro,
       usageCount,
-      limit: FREE_TIER_LIMIT,
-      remaining: Math.max(0, FREE_TIER_LIMIT - usageCount),
+      limit: isPro ? null : FREE_TIER_LIMIT,
+      remaining: isPro ? null : Math.max(0, FREE_TIER_LIMIT - usageCount),
       limitReached: !isPro && usageCount >= FREE_TIER_LIMIT,
     });
   } catch (error) {

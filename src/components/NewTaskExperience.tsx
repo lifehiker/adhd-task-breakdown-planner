@@ -37,7 +37,7 @@ export function NewTaskExperience() {
   const [recentLocalSessions, setRecentLocalSessions] = useState<SessionSummary[]>([]);
   const [checkingRecents, setCheckingRecents] = useState(true);
   const [showUpgrade, setShowUpgrade] = useState(false);
-  const [usageRemaining, setUsageRemaining] = useState<number | null>(null);
+  const [usageData, setUsageData] = useState<{ isPro: boolean; remaining: number | null } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +47,7 @@ export function NewTaskExperience() {
         const res = await fetch("/api/usage/check?localSessionKey=" + encodeURIComponent(getLocalSessionKey()));
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled) setUsageRemaining(data.remaining ?? null);
+        if (!cancelled) setUsageData({ isPro: Boolean(data.isPro), remaining: data.remaining ?? null });
       } catch {
         // ignore usage fetch issues
       }
@@ -93,7 +93,7 @@ export function NewTaskExperience() {
       const res = await fetch("/api/usage/check?localSessionKey=" + encodeURIComponent(getLocalSessionKey()));
       if (!res.ok) return;
       const data = await res.json();
-      setUsageRemaining(data.remaining ?? null);
+      setUsageData({ isPro: Boolean(data.isPro), remaining: data.remaining ?? null });
     } catch {
       // ignore usage fetch issues
     }
@@ -140,11 +140,17 @@ export function NewTaskExperience() {
           <div className="mt-8 rounded-[2rem] border border-line bg-white/70 p-5 shadow-glow">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-ink-soft">Free plan</p>
-                <p className="mt-1 text-sm text-ink-soft">You get 5 AI breakdowns per month before upgrading.</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-ink-soft">
+                  {usageData?.isPro ? "Pro plan" : "Free plan"}
+                </p>
+                <p className="mt-1 text-sm text-ink-soft">
+                  {usageData?.isPro
+                    ? "Unlimited AI breakdowns are active on your account."
+                    : "You get 5 AI breakdowns per month before upgrading."}
+                </p>
               </div>
-              <Badge className="rounded-full border-0 bg-[#16313a] px-3 py-1 text-[#f6f0e5]">
-                {usageRemaining == null ? "Checking..." : `${usageRemaining} left`}
+              <Badge className={`rounded-full border-0 px-3 py-1 ${usageData?.isPro ? "bg-teal text-white" : "bg-[#16313a] text-[#f6f0e5]"}`}>
+                {usageData == null ? "Checking..." : usageData.isPro ? "Unlimited" : `${usageData.remaining ?? 0} left`}
               </Badge>
             </div>
             <TaskInputForm
