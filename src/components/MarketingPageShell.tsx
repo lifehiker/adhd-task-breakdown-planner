@@ -39,7 +39,7 @@ export function MarketingPageShell({
       </header>
 
       <main className="mx-auto mt-8 grid max-w-6xl gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="animate-fade-in-up">
+        <section>
           <p className="focus-kicker mb-6">{kicker}</p>
           <h1 className="font-display text-5xl leading-[0.92] tracking-[-0.03em] text-ink md:text-7xl">{title}</h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-ink-soft">{description}</p>
@@ -68,7 +68,7 @@ export function MarketingPageShell({
           </div>
         </section>
 
-        <section className="animate-fade-in-up delay-200">
+        <section>
           <div className="focus-panel rounded-[2.2rem] p-6 md:p-7">
             <div className="rounded-[1.8rem] border border-line bg-[#16313a] p-6 text-white">
               <p className="text-xs uppercase tracking-[0.24em] text-white/55">{accentLabel}</p>
