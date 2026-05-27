@@ -154,6 +154,7 @@ function initPrismaClient(): PrismaClientLike {
     };
 
     const client = new PrismaClient({
+      adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL ?? "file:./dev.db" }),
       log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
     });
 
