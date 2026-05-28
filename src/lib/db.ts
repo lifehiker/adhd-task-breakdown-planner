@@ -1,3 +1,5 @@
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+
 type UserRecord = {
   id: string;
   email: string | null;
@@ -150,7 +152,7 @@ function initPrismaClient(): PrismaClientLike {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PrismaClient } = require("@prisma/client") as {
-      PrismaClient: new (options?: { log?: string[] }) => PrismaClientLike;
+      PrismaClient: new (options?: { log?: string[]; adapter?: unknown }) => PrismaClientLike;
     };
 
     const client = new PrismaClient({
