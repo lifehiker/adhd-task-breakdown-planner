@@ -5,11 +5,13 @@ COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts
 
 FROM node:20-slim AS builder
-# Install OpenSSL for Prisma schema engine (debian-openssl-3.0.x target)
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# Install OpenSSL for Prisma schema engine (debian-openssl-3.0.x target) + native build tools for better-sqlite3
+RUN apt-get update -y && apt-get install -y openssl python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Rebuild better-sqlite3 native bindings for the target platform (skipped by --ignore-scripts in deps stage)
+RUN npm rebuild better-sqlite3
 ENV DATABASE_URL="file:/tmp/build.db"
 ENV AUTH_SECRET="build-time-placeholder-secret"
 ENV NEXT_PUBLIC_APP_URL="https://localhost:3000"
