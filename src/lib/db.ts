@@ -149,6 +149,23 @@ function initPrismaClient(): PrismaClientLike {
     return globalThis.__prismaClient__;
   }
 
+  // Prisma 7 + better-sqlite3 adapter connects lazily: new PrismaClient()
+  // succeeds even when the native .node binding is missing, so the error only
+  // surfaces on the first query (inside adapter.connect()). Pre-test here so
+  // isPrismaAvailable is correctly false when bindings are absent.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("better-sqlite3");
+  } catch (bindingError) {
+    const prismaError =
+      bindingError instanceof Error
+        ? bindingError
+        : new Error("better-sqlite3 native bindings not available");
+    globalThis.__prismaInitError__ = prismaError;
+    globalThis.__prismaClient__ = createUnavailableClient(prismaError);
+    return globalThis.__prismaClient__;
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PrismaClient } = require("@prisma/client") as {
