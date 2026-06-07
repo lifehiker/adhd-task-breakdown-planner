@@ -54,7 +54,7 @@ export default function HomePage() {
 
       <main className="px-5 pb-16 pt-8 md:px-8 md:pb-24 md:pt-10">
         <section className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="animate-fade-in-up">
+          <div>
             <div className="focus-kicker mb-6">
               <span className="h-2 w-2 rounded-full bg-clay" />
               For ADHD brains that need traction, not another system
@@ -89,7 +89,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="animate-fade-in-up delay-200">
+          <div>
             <div className="focus-panel focus-grid relative overflow-hidden rounded-[2rem] p-5 md:p-7">
               <div className="absolute right-5 top-5 rounded-full border border-line bg-white/70 px-3 py-1 text-xs uppercase tracking-[0.25em] text-ink-soft">
                 Live session
